@@ -4,8 +4,8 @@ import { createInterface } from 'node:readline';
 const timeoutError = 'The accessibility service did not respond. Voice typing stopped.';
 
 export class FocusedTarget {
-  constructor(command, args, { onInvalid, onShortcut, onLost }) {
-    Object.assign(this, { command, args, onInvalid, onShortcut, onLost });
+  constructor(command, args, { onFailure, onShortcut, onLost }) {
+    Object.assign(this, { command, args, onFailure, onShortcut, onLost });
     this.pending = new Map();
     this.sequence = 0;
   }
@@ -19,15 +19,12 @@ export class FocusedTarget {
     lines.on('line', line => {
       if (this.worker !== worker) return;
       const message = JSON.parse(line);
-      if (message.invalid) this.onInvalid(message.invalid, message.error);
-      if (message.shortcut) {
-        worker.shortcutRelease = message.release;
-        this.onShortcut(message.shortcut, message.context);
-      }
+      if (message.failed) this.onFailure(message.failed, message.error);
+      if (message.shortcut) this.onShortcut(message.shortcut, message.context);
       const complete = this.pending.get(message.request);
       complete?.(message);
     });
-    const lost = () => this.disconnect(worker, 'The desktop accessibility service stopped. Reopen the text field and try again.');
+    const lost = () => this.disconnect(worker, 'The desktop accessibility service stopped. Try starting voice typing again.');
     process.on('error', lost);
     process.on('exit', lost);
     process.stdin.on('error', lost);
@@ -40,7 +37,7 @@ export class FocusedTarget {
     if (this.draining) return Promise.reject(Error(timeoutError));
     const worker = this.connect();
     const request = ++this.sequence;
-    if (action === 'bind-shortcut' || action === 'bind-tray') worker.token = token;
+    if (action === 'authorize') worker.token = token;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.disconnect(worker, timeoutError, process.platform === 'darwin'), 7000);
       this.pending.set(request, ({ error, waiting }) => {
@@ -54,8 +51,7 @@ export class FocusedTarget {
         if (error) reject(Error(error));
         else resolve();
       });
-      const payload = action === 'bind-shortcut' ? worker.shortcutRelease : text;
-      worker.process.stdin.write(JSON.stringify({ request, action, token, text: payload }) + '\n');
+      worker.process.stdin.write(JSON.stringify({ request, action, token, text }) + '\n');
     });
   }
 
@@ -65,7 +61,7 @@ export class FocusedTarget {
     if (graceful) this.drain(worker);
     else if (!this.closing) worker.process.kill();
     for (const complete of this.pending.values()) complete({ error });
-    if (worker.token) this.onInvalid(worker.token, error);
+    if (worker.token) this.onFailure(worker.token, error);
     this.onLost(error);
   }
 

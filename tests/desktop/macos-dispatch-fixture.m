@@ -7,15 +7,19 @@
 // editor. Substitute focus, event posting and time to avoid OS permissions,
 // real clipboard changes or timing dependencies in delayed consumption.
 static NSPasteboard *clipboard;
-static NSTextView *editors[2];
-static id windows[2], fields[2], systemElement;
+static NSTextView *editors[3];
+static id fields[3], systemElement;
 static NSUInteger focused, keyDowns, keyUps;
 static pid_t frontPid = 100;
+static pid_t systemFieldPID;
 static BOOL trusted = YES, canPost = YES;
 static BOOL secureInput, protectedField, disabledField, readOnly, notEditable;
-static BOOL modifiers, sameWindow, noWindow, noField, systemField, noRole;
-static BOOL failSnapshot, failStage, failRestore, switchAfterStage, copyAfterStage, pauseAfterStage;
+static BOOL modifiers, noField, systemField, noRole, menu;
+static BOOL failSnapshot, failStage, failRestore, copyAfterStage, pauseAfterStage;
 static BOOL switchDuringProtection, switchLayoutAfterStage;
+static pid_t switchAppAfterStage;
+static NSString *axFailure;
+static float globalAXTimeout;
 static BOOL currentHostOnly;
 static CGKeyCode layoutPasteKey = kVK_ANSI_Period;
 static dispatch_semaphore_t resumeFocus;
@@ -30,7 +34,6 @@ static void emitMessage(NSDictionary *message);
 
 @interface FixtureWorkspace : NSObject
 @property (readonly) NSRunningApplication *frontmostApplication;
-@property (readonly) NSNotificationCenter *notificationCenter;
 @property (readonly) pid_t processIdentifier;
 + (instancetype)sharedWorkspace;
 @end
@@ -38,7 +41,6 @@ static void emitMessage(NSDictionary *message);
 @implementation FixtureWorkspace
 + (instancetype)sharedWorkspace { return [self new]; }
 - (NSRunningApplication *)frontmostApplication { return (NSRunningApplication *)self; }
-- (NSNotificationCenter *)notificationCenter { return NSNotificationCenter.defaultCenter; }
 - (pid_t)processIdentifier { return frontPid; }
 @end
 
@@ -73,7 +75,10 @@ static void copyText(NSString *text) {
     BOOL staging = [[(NSPasteboardItem *)objects.firstObject types] containsObject:@"org.nspasteboard.TransientType"];
     if (staging ? failStage : failRestore) return NO;
     BOOL wrote = [clipboard writeObjects:objects];
-    if (staging && switchAfterStage) focused = 1;
+    if (staging && switchAppAfterStage) {
+        focused = 2;
+        frontPid = switchAppAfterStage;
+    }
     if (staging && switchLayoutAfterStage) layoutPasteKey = kVK_ANSI_V;
     if (staging && copyAfterStage) copyText(@"copied before dispatch");
     return wrote;
@@ -83,12 +88,13 @@ static void copyText(NSString *text) {
 static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTypeRef *value) {
     NSString *key = (__bridge NSString *)attribute;
     id object = (__bridge id)element;
+    if ([key isEqual:axFailure] || (object == systemElement && [axFailure isEqual:@"system focus"])) {
+        return kAXErrorCannotComplete;
+    }
     id result = nil;
-    if ([key isEqual:@"AXFocusedWindow"] && !noWindow) result = windows[sameWindow ? 0 : focused];
-    else if ([key isEqual:@"AXFocusedUIElement"]) {
+    if ([key isEqual:@"AXFocusedUIElement"]) {
         if (object == systemElement ? systemField : !noField) result = fields[focused];
-    } else if ([key isEqual:@"AXWindow"] && !noWindow) result = windows[!sameWindow && object == fields[1]];
-    else if ([key isEqual:@"AXRole"] && !noRole) result = @"AXTextArea";
+    } else if ([key isEqual:@"AXRole"] && !noRole) result = menu ? @"AXMenuItem" : @"AXTextArea";
     else if ([key isEqual:@"AXSubrole"]) {
         // Move focus after the post-staging identity and AXFocused reads.
         if (switchDuringProtection && object == fields[0] &&
@@ -102,21 +108,7 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     else if ([key isEqual:@"AXReadOnly"] && readOnly) result = @YES;
     else if ([key isEqual:@"AXEditable"] && notEditable) result = @NO;
     *value = CFBridgingRetain(result);
-    return result ? kAXErrorSuccess : kAXErrorAttributeUnsupported;
-}
-
-static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultipleAttributeOptions options,
-                         CFArrayRef *values) {
-    assert(options == 0);
-    NSMutableArray *focus = [NSMutableArray array];
-    for (NSString *key in (__bridge NSArray *)keys) {
-        CFTypeRef value = NULL;
-        AXError status = copyAttribute(element, (__bridge CFStringRef)key, &value);
-        if (status != kAXErrorSuccess) value = AXValueCreate(kAXValueTypeAXError, &status);
-        [focus addObject:CFBridgingRelease(value)];
-    }
-    *values = CFBridgingRetain(focus);
-    if (pauseAfterStage && [clipboard availableTypeFromArray:@[@"org.nspasteboard.TransientType"]]) {
+    if ([key isEqual:@"AXFocusedUIElement"] && pauseAfterStage && [clipboard availableTypeFromArray:@[@"org.nspasteboard.TransientType"]]) {
         pauseAfterStage = NO;
         if (focusStallMs) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, focusStallMs * NSEC_PER_MSEC),
@@ -128,12 +120,17 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
         assert(dispatch_semaphore_wait(resumeFocus,
             dispatch_time(DISPATCH_TIME_NOW, focusStallMs * NSEC_PER_MSEC + 5 * NSEC_PER_SEC)) == 0);
     }
+    return result ? kAXErrorSuccess : kAXErrorAttributeUnsupported;
+}
+
+static AXError setMessagingTimeout(AXUIElementRef element, float timeout) {
+    if ((__bridge id)element == systemElement) globalAXTimeout = timeout;
     return kAXErrorSuccess;
 }
 
 static AXError getPid(AXUIElementRef element, pid_t *pid) {
-    assert((__bridge id)element == fields[0] || (__bridge id)element == fields[1]);
-    *pid = frontPid;
+    assert((__bridge id)element == fields[focused]);
+    *pid = systemFieldPID ?: frontPid;
     return kAXErrorSuccess;
 }
 
@@ -158,9 +155,9 @@ static OSStatus translateKey(const UCKeyboardLayout *layout, UInt16 key, UInt16 
     return noErr;
 }
 
-static void postKey(pid_t pid, CGEventRef event) {
-    assert(pid == frontPid && trusted && canPost && !secureInput && !protectedField &&
-           !disabledField && !readOnly && !notEditable && !modifiers);
+static void postKey(CGEventTapLocation tap, CGEventRef event) {
+    assert(tap == kCGSessionEventTap && frontPid > 0 && trusted && canPost && !secureInput && !protectedField &&
+           !disabledField && !readOnly && !notEditable && !modifiers && !menu);
     [keyCodes addObject:@(CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode))];
     assert(CGEventGetFlags(event) == kCGEventFlagMaskCommand);
     if (CGEventGetType(event) == kCGEventKeyUp) {
@@ -214,15 +211,13 @@ static void advanceTime(uint64_t ms) {
 #define AXIsProcessTrusted() (trusted)
 #define AXIsProcessTrustedWithOptions(options) (trusted)
 #define AXUIElementCopyAttributeValue copyAttribute
-#define AXUIElementCopyMultipleAttributeValues copyFocus
 #define AXUIElementCreateSystemWide() ((__bridge_retained AXUIElementRef)systemElement)
 #define AXUIElementGetPid getPid
-#define AXUIElementSetMessagingTimeout(...) ((void)0)
-#define AXObserverCreate(pid, callback, observer) ((void)(callback), kAXErrorNotImplemented)
+#define AXUIElementSetMessagingTimeout setMessagingTimeout
 #define IsSecureEventInputEnabled() (secureInput)
 #define CGPreflightPostEventAccess() (canPost)
 #define GetCurrentKeyModifiers() (modifiers ? cmdKey : 0)
-#define CGEventPostToPid postKey
+#define CGEventPost postKey
 #define TISCopyCurrentKeyboardLayoutInputSource fixtureInputSource
 #define TISGetInputSourceProperty layoutProperty
 #define UCKeyTranslate translateKey
@@ -244,9 +239,9 @@ static NSDictionary *fixtureState(void) {
         }
         [items addObject:formats];
     }
-    return @{@"text": editors[0].string, @"other": editors[1].string, @"reads": reads,
+    return @{@"text": editors[0].string, @"other": editors[1].string, @"external": editors[2].string, @"reads": reads,
              @"keyDowns": @(keyDowns), @"keyUps": @(keyUps), @"keyCodes": keyCodes, @"clipboard": items,
-             @"currentHostOnly": @(currentHostOnly)};
+             @"currentHostOnly": @(currentHostOnly), @"globalAXTimeout": @(globalAXTimeout)};
 }
 
 static void reportQuit(void) {
@@ -272,16 +267,17 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"modifiers"]) modifiers = [options[@"modifiers"] boolValue];
     if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
     if (options[@"frontPid"]) frontPid = [options[@"frontPid"] intValue];
-    if (options[@"sameWindow"]) sameWindow = [options[@"sameWindow"] boolValue];
-    if (options[@"noWindow"]) noWindow = [options[@"noWindow"] boolValue];
     if (options[@"noField"]) noField = [options[@"noField"] boolValue];
     if (options[@"systemField"]) systemField = [options[@"systemField"] boolValue];
+    if (options[@"systemFieldPID"]) systemFieldPID = [options[@"systemFieldPID"] intValue];
+    if (options[@"menu"]) menu = [options[@"menu"] boolValue];
     if (options[@"noRole"]) noRole = [options[@"noRole"] boolValue];
+    if (options[@"axFailure"]) axFailure = options[@"axFailure"];
     if (options[@"editorEditable"]) editors[0].editable = [options[@"editorEditable"] boolValue];
     if (options[@"failSnapshot"]) failSnapshot = [options[@"failSnapshot"] boolValue];
     if (options[@"failStage"]) failStage = [options[@"failStage"] boolValue];
     if (options[@"failRestore"]) failRestore = [options[@"failRestore"] boolValue];
-    if (options[@"switchAfterStage"]) switchAfterStage = [options[@"switchAfterStage"] boolValue];
+    if (options[@"switchAppAfterStage"]) switchAppAfterStage = [options[@"switchAppAfterStage"] intValue];
     if (options[@"switchDuringProtection"]) switchDuringProtection = [options[@"switchDuringProtection"] boolValue];
     if (options[@"switchLayoutAfterStage"]) switchLayoutAfterStage = [options[@"switchLayoutAfterStage"] boolValue];
     if (options[@"copyAfterStage"]) copyAfterStage = [options[@"copyAfterStage"] boolValue];
@@ -301,8 +297,7 @@ static void handleFixture(NSDictionary *message) {
 int main(void) {
     @autoreleasepool {
         [NSApplication.sharedApplication setActivationPolicy:NSApplicationActivationPolicyProhibited];
-        for (NSUInteger i = 0; i < 2; i++) {
-            windows[i] = CFBridgingRelease(AXUIElementCreateApplication(101 + (pid_t)i));
+        for (NSUInteger i = 0; i < 3; i++) {
             fields[i] = CFBridgingRelease(AXUIElementCreateApplication(103 + (pid_t)i));
             editors[i] = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 440, 240)];
             editors[i].richText = NO;
@@ -310,6 +305,7 @@ int main(void) {
         editors[0].string = @"left|right";
         editors[0].selectedRange = NSMakeRange(4, 1);
         editors[1].string = @"other";
+        editors[2].string = @"external";
         systemElement = CFBridgingRelease(AXUIElementCreateApplication(105));
 
         clipboard = [NSPasteboard pasteboardWithUniqueName];

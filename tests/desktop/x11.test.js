@@ -173,6 +173,23 @@ async function trayClick(button) {
   await wait(350);
 }
 
+test('Cancel during X11 target lookup revokes the pending edit', () => {
+  const output = execFileSync('/usr/bin/python3', ['-B', 'tests/desktop/x11-cancel-fixture.py'], {
+    encoding: 'utf8', timeout: 5000,
+  });
+  assert.deepEqual(output.trim().split('\n').map(line => JSON.parse(line)), [
+    { request: 1 },
+    { request: 2, error: 'The voice typing session is no longer authorized.' },
+    { request: 3 },
+  ]);
+});
+
+test('X11 edits recheck focus and recover from transient failures in order', () => {
+  execFileSync('/usr/bin/python3', ['-B', 'tests/desktop/x11-insert-fixture.py'], {
+    encoding: 'utf8', timeout: 5000,
+  });
+});
+
 test('packaged app uses the real tray, editor, shortcut and focused desktop controls', { timeout: 150000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-x11-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
@@ -292,55 +309,29 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await phase('idle');
   assert.deepEqual(native.get().values, ['', 'left| 東京🙂\nright']);
 
-  // Move to the second field before the toolkit has settled after the grab.
-  // Start must fail without redirecting the graph output to that field.
-  await wait(320);
-  x('key', '--delay', '1', hotkey, 'ctrl+Page_Up');
-  await eventually(() => native.get().focus === 0, 'GTK focus did not move immediately after the shortcut');
-  await eventually(async () => /lost focus|changed|closed|exposes AT-SPI editing/i.test((await view()).session.error),
-    'Shortcut did not reject the focus change during Start');
-  await phase('idle');
-  assert.deepEqual(native.get().values, ['', 'left| 東京🙂\nright']);
-  const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
-  await indicator.getByRole('button', { name: 'Dismiss' }).click();
-  await eventually(async () => !(await view()).session.error, 'The shortcut error was not dismissed');
-  x('key', 'ctrl+Page_Down');
-  await eventually(() => native.get().focus === 1, 'GTK focus did not return to the first field');
-
-  await trayClick(3);
-  x('key', '--delay', '1', 'Home', 'Return', 'ctrl+Page_Up');
-  await eventually(() => native.get().focus === 0, 'GTK focus did not move as the tray menu dismissed');
-  await eventually(async () => /lost focus|changed|closed/i.test((await view()).session.error),
-    'Tray Start did not reject the focus change during menu dismissal');
-  await phase('idle');
-  assert.deepEqual(native.get().values, ['', 'left| 東京🙂\nright']);
-  x('key', 'ctrl+Page_Down');
-  await eventually(() => native.get().focus === 1, 'GTK focus did not return after tray Start was rejected');
-
   await trayClick(3);
   await wait(1000);
   x('key', 'Home', 'Return');
   await phase('running');
   await eventually(() => native.get().values[1] === 'left| 東京🙂\n 東京🙂\nright',
-    'The tray did not start a fresh session in the authorized editor');
+    'The tray did not start a fresh session in the focused editor');
   x('key', 'ctrl+Page_Up');
   await eventually(() => native.get().focus === 0, 'GTK focus did not move');
-  await phase('idle');
-  assert.match((await view()).session.error, /lost focus|changed|closed/i);
+  assert.equal((await view()).session.phase, 'running');
   assert.equal(native.get().values[0], '');
 
+  // Losing the editor leaves the graph running until explicit Stop.
+  native.process.kill();
   await show();
+  await phase('running');
+  await app.windows().find(window => window.url().endsWith('/indicator.html'))
+    .getByRole('button', { name: 'Stop', exact: true }).evaluate(button => button.click());
+  await phase('idle');
+  assert.equal((await view()).session.error, '');
+
   await selectGraph(page, 'GTK fixture');
   await page.reload();
   await expect(page.getByRole('article', { name: 'GTK fixture', exact: true }).getByText('Shortcut graph')).toBeVisible();
-  x('windowactivate', '--sync', native.id);
-  x('key', 'ctrl+Page_Down');
-  await eventually(() => native.get().focus === 1, 'GTK focus did not return to the editor');
-  await trigger(native.id);
-  await phase('running');
-  native.process.kill();
-  await phase('idle');
-  assert.match((await view()).session.error, /lost focus|changed|closed/i);
 
   // Quit through the real XEmbed tray menu with a graph still running.
   await show();
@@ -361,96 +352,127 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.deepEqual(errors, []);
 });
 
-test('packaged app edits independent GTK fields within native limits and leaves protected controls untouched', { timeout: 60000 }, async t => {
+async function committedText(app) {
+  const runtime = app.windows().find(window => window.url().endsWith('/runtime.html'));
+  await runtime.evaluate(() => {
+    window.runtimeHost.onCommand(({ action, args }) => {
+      if (action === 'start') window.testSession = args[0];
+    });
+  });
+  return text => runtime.evaluate(chunk => window.runtimeHost.insert(window.testSession, chunk), text);
+}
+
+test('packaged app skips a stalled GTK target and keeps delivering in the same session', { timeout: 60000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-x11-stall-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
+  const { app, page, phase, view } = await launch(t);
+  await importGraph(page, 'Stall fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
+  await selectGraph(page, 'Stall fixture');
+  const commit = await committedText(app);
+  x('key', 'alt+F4');
+  const native = await editor(t, dir);
+  const stalled = await gtkFixture(t, dir);
+  await trigger(stalled.id);
+  await phase('running');
+  const initial = stalled.get().values;
+
+  assert.ok(stalled.process.kill('SIGSTOP'));
+  try {
+    await commit('skip stalled target');
+    assert.equal((await view()).session.phase, 'running');
+    await activate(native.id);
+    await commit('next');
+    await eventually(() => native.get().values[1] === 'left|nextright',
+      'The next chunk did not reach the responsive editor');
+    assert.equal((await view()).session.phase, 'running');
+  } finally {
+    stalled.process.kill('SIGCONT');
+  }
+  await trigger(stalled.id);
+  await phase('idle');
+  assert.equal((await view()).session.error, '');
+  assert.deepEqual(stalled.get().values, initial);
+});
+
+test('packaged app follows GTK focus and skips protected controls during a session', { timeout: 60000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-gtk-limits-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
-  const { app, page, view } = await launch(t);
-  await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, 'abcdef'));
+  const { app, page, phase, view } = await launch(t);
+  await importGraph(page, 'Length fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
   await selectGraph(page, 'Length fixture');
+  const commit = await committedText(app);
   x('key', 'alt+F4');
   const native = await gtkFixture(t, dir);
-  const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
-
-  async function tryField(focus, verify) {
-    await eventually(() => native.get().focus === focus, `GTK did not focus fixture control ${focus}`);
-    await trigger(native.id);
-    await verify();
-    assert.equal(x('getwindowfocus'), native.id);
-  }
-
-  async function refused(message) {
-    await eventually(async () => {
-      const { session } = await view();
-      return session.phase === 'idle' && session.error.includes(message);
-    }, `Desktop did not refuse GTK fixture control: ${message}`);
-    await indicator.getByRole('button', { name: 'Dismiss' }).click();
-    await eventually(async () => !(await view()).session.error, 'The desktop error was not dismissed');
-  }
-
-  async function edited(check) {
-    await eventually(async () => {
-      const { session } = await view();
-      assert.equal(session.error, '');
-      return session.phase === 'running' && check(native.get());
-    }, 'Desktop did not apply the native edit');
-    await trigger(native.id);
-    await eventually(async () => (await view()).session.phase === 'idle', 'Desktop did not stop');
-  }
-
   await activate(native.id);
-  x('key', 'ctrl+Tab', 'ctrl+Tab');
-  await tryField(2, () => refused('exposes AT-SPI editing'));
-  x('key', 'Tab', 'Home', 'Right');
-  await tryField(3, () => edited(state => state.values[3] === 'xaby'));
-  x('key', 'Tab');
-  await tryField(4, () => refused('editable text region'));
-  x('key', 'ctrl+Tab');
-  await tryField(5, () => edited(state => state.constrained === 'left|abright'));
+  const focus = (key, field, ...keys) => {
+    x('key', key, ...keys);
+    return eventually(() => native.get().focus === field, `GTK did not focus fixture control ${field}`);
+  };
 
+  x('key', 'ctrl+Tab');
+  await focus('ctrl+Tab', 2);
+  await trigger(native.id);
+  await phase('running');
+  await commit('skip password');
+  await focus('Tab', 3, 'Home', 'Right');
+  await commit('abcdef');
+  await focus('Tab', 4);
+  await commit('skip locked text');
+  await focus('ctrl+Tab', 5);
+  await commit('abcdef');
+
+  assert.equal((await view()).session.phase, 'running');
+  assert.equal(x('getwindowfocus'), native.id);
+  await trigger(native.id);
+  await phase('idle');
+  assert.equal((await view()).session.error, '');
   assert.deepEqual(native.get(), {
     values: ['left|right', '', 'secret', 'xaby'], focus: 5, limitedEdits: 1,
     tagged: 'open locked tail', constrained: 'left|abright', constrainedCaret: 7, constrainedEdits: 1,
   });
 });
 
-test('packaged app refuses unsupported Chromium targets before any edit', { timeout: 90000 }, async t => {
-  const { page } = await launch(t);
-  await importGraph(page, 'Browser fixture', literalGraph('{1}', FOCUSED_OUTPUT, ' [東京🙂] '));
+test('packaged app skips unsupported Chromium targets and follows focus back to an editor', { timeout: 90000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-browser-focus-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
+  const { app, page, phase, view } = await launch(t);
+  await importGraph(page, 'Browser fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
   await selectGraph(page, 'Browser fixture');
-  await page.evaluate(() => {
-    window.testSessions = [];
-    window.desktop.onUpdate(({ session }) => window.testSessions.push(session));
-  });
+  const commit = await committedText(app);
   x('key', 'alt+F4');
+  const native = await editor(t, dir);
   const chromium = await browser(t);
+  await trigger(chromium.id);
+  await phase('running');
   const values = {
     field: 'left|right', notes: 'left|right', limited: 'xy', multiline: 'xy', editable: 'xy', readonly: 'xy', password: 'secret',
   };
 
-  for (const target of Object.keys(values)) {
+  for (const target of ['notes', 'readonly', 'password']) {
     const before = await chromium.focus(target);
-    await page.evaluate(() => { window.testSessions.length = 0; });
-    await trigger(chromium.id);
-    await eventually(async () => {
-      const sessions = await page.evaluate(() => window.testSessions);
-      assert.deepEqual(sessions.map(session => session.phase), ['preparing', 'canceling', 'idle']);
-      assert.match(sessions.at(-1).error, /exposes AT-SPI editing|authorized text field/);
-      return true;
-    }, `Desktop did not report a refusal for ${target}`);
+    await commit('skip unsupported target');
     const report = chromium.get().report;
-    await eventually(() => chromium.get().report > report && chromium.get().active,
-      'Chromium did not report its focused state after the refusal');
-
-    const { focus, caret, values: currentValues, edits, submits } = chromium.get();
+    const { focus, caret, values: currentValues, edits, submits } = await eventually(() => {
+      const current = chromium.get();
+      return current.report > report && current.active && current;
+    }, 'Chromium did not report its focused state after the chunk');
     assert.deepEqual({ focus, caret, values: currentValues, edits, submits }, {
       focus: target, caret: before.caret, values, edits: [], submits: 0,
     });
-    assert.equal(x('getactivewindow'), chromium.id);
     assert.equal(x('getwindowfocus'), chromium.id);
   }
+
+  await activate(native.id);
+  await eventually(() => native.get().focus === 1, 'Mousepad did not regain field focus');
+  await commit('東京🙂');
+  await eventually(() => native.get().values[1] === 'left|東京🙂right', 'The next chunk did not reach Mousepad');
+  assert.equal((await view()).session.phase, 'running');
+  await trigger(native.id);
+  await phase('idle');
+  assert.equal((await view()).session.error, '');
 });
 
-test('committed text waits for the Stop shortcut grab and stays bound to the original GTK field', { timeout: 60000 }, async t => {
+test('committed text waits for the Stop shortcut grab and follows the current GTK field', { timeout: 60000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-stop-shortcut-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
   const { app, page, view, phase, show } = await launch(t);
@@ -514,9 +536,10 @@ test('committed text waits for the Stop shortcut grab and stays bound to the ori
   }
   await eventually(() => native.get().focus === 0, 'GTK focus did not move during shortcut release');
   await phase('idle');
-  assert.equal((await runtime.evaluate(() => window.testInsert)).inserted, false);
-  assert.match((await view()).session.error, /lost focus|changed|closed/i);
-  assert.deepEqual(native.get().values, afterStop);
+  assert.deepEqual(await runtime.evaluate(() => window.testInsert), { inserted: true });
+  assert.equal((await view()).session.error, '');
+  await eventually(() => native.get().values[0] === committed, 'Stop did not drain into the newly focused tab');
+  assert.deepEqual(native.get().values, [committed, afterStop[1]]);
 });
 
 test('Models can retry cache inspection and preparation after the packaged runtime crashes', { timeout: 60000 }, async t => {

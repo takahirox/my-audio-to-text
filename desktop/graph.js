@@ -11,7 +11,7 @@ export const desktopNodeTypes = Object.freeze({
   Text: NODE_TYPES.Text,
   Display: NODE_TYPES.Display,
   [FOCUSED_OUTPUT]: { ...NODE_TYPES[FOCUSED_OUTPUT], label: 'Focused application text output',
-    help: 'Insert committed TEXT at the authorized caret in another application. Use the global shortcut or tray to start.' },
+    help: 'Send committed TEXT to the field focused at delivery. Use the global shortcut or tray to start.' },
 });
 
 export function defaultDesktopGraph() {
@@ -37,7 +37,7 @@ export function planGraph(value, mode) {
   const focused = count(FOCUSED_OUTPUT);
   if (focused > 1 || count(MICROPHONE) > 1) throw Error('Connect at most one microphone and one focused application output.');
   if (mode === 'dictation' && !focused) throw Error('Choose a saved graph with a connected focused application output in Graph Library.');
-  if (mode === 'live' && focused) throw Error('Start this graph from its shortcut or tray while an external text field is focused.');
+  if (mode === 'live' && focused) throw Error('Start this graph from the global shortcut or tray.');
   if (mode === 'live' && !count('Display')) throw Error('Connect a source to Display to run this graph in Live.');
   const displays = graph.nodes.filter(node => node.type === 'Display').map(({ id, settings }) => ({ id, settings }));
   return { graph, microphone: count(MICROPHONE) === 1, focused: focused === 1, displays };
