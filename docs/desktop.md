@@ -2,10 +2,9 @@
 
 My Audio to Text Desktop runs saved graphs locally from a resident menu-bar
 or tray application. macOS on Apple Silicon is the primary v1 target. The
-macOS app writes to the active editor, browser field, or other editable text
-control through Accessibility editing or native keyboard input. The X11 app
-uses AT-SPI editing. Compatibility depends on the focused field and the
-input it accepts.
+macOS app pastes into the active editor, browser field, or other editable text
+control using the system clipboard and Command+V. The X11 app uses AT-SPI
+editing. Compatibility depends on the focused field and the input it accepts.
 
 ## Build and launch
 
@@ -86,26 +85,37 @@ identify them. Before each dispatch it rechecks the available focus information
 and waits for the shortcut and modifiers to be released. A release from an
 ended voice typing or Display-only Live session is discarded.
 
-The helper prefers Accessibility selected-text editing or range replacement
-when the field reliably exposes it. Otherwise it sends Unicode keyboard
-events to the active application, including when Accessibility provides only
-partial focus or editing information. The fallback requires macOS authorization
-to post keyboard events. Each event carries its own text and leaves the clipboard
-untouched. Cmd+V would require the receiving app to read each streamed chunk
-from the shared clipboard before dictation could safely restore or replace it.
+Each nonempty committed TEXT chunk is staged on the system clipboard and
+pasted as it arrives during recording. Repeated commits are pasted separately.
+Provisional hypotheses stay out of the focused field. The helper stages
+Unicode, whitespace, line breaks, and tabs as plain text. The application
+handles Paste normally, including selection replacement, formatting,
+truncation, or rejection. The helper refuses secure keyboard input and
+fields that macOS identifies as protected, disabled, or read-only. Fields
+with incomplete Accessibility editing metadata can receive Paste.
 
-Single-line fields, multiline fields, and selections use the target's editing
-rules. A field can normalize, truncate, or ignore a chunk, and some apps ignore
-the Unicode payload in keyboard events. The keyboard fallback converts line
-breaks and tabs to spaces and omits key-command characters to avoid submitting
-forms or moving focus. The helper stops if macOS reports secure keyboard input
-or identifies the field as protected, disabled, or read-only.
+The helper gives each Paste 250 ms to read the clipboard before attempting
+to restore the previous clipboard and starting the next chunk. It preserves
+clipboard items and formats it can read, including non-text data. Some
+source-provided formats, such as unavailable promised data, may be lost.
+If the helper cannot read the existing clipboard at all, it stops before
+staging text.
+Restoration checks the clipboard generation to preserve a newer copy. macOS
+provides neither an atomic clipboard swap nor confirmation that a field
+completed Paste. An app that reads very late or during a concurrent copy
+can receive different clipboard contents. Dictation stages text and restores
+clipboard items for the current Mac only. It marks the temporary text as
+transient. Clipboard history or clipboard managers can still record the
+temporary text or restored items.
 
 A detected focus change or the loss of a previously verified identity stops
 the session and discards pending output. If macOS reports only the active
-application, changes within it may be invisible to the helper. An edit already
+application, changes within it may be invisible to the helper. Paste already
 in flight can reach a different field if focus changes after the final check.
-Stop dictation and wait for the session to finish before switching fields or apps.
+Stop drains accepted chunks while the target remains authorized. Cancel or
+Quit discards pending chunks and lets the helper finish clipboard cleanup,
+including the settling interval for an already posted Paste. Wait for the
+session to finish before switching fields or apps.
 
 On X11, the focused control must expose AT-SPI `Text` and `EditableText`
 interfaces. Place a caret in an editable span. AT-SPI inserts at the caret
@@ -128,13 +138,15 @@ using the [Apple Silicon build commands](#apple-silicon-macos).
   Text**, or enable it under **System Settings → Privacy & Security →
   Microphone**.
 - Under **Privacy & Security → Device Control and Data Access** on macOS
-  27.2, enable **My Audio to Text** for focused-field access.
-  The setting is called **Accessibility** on older
+  27.2, enable **My Audio to Text** for focused-field access and posting
+  Command+V. The setting is called **Accessibility** on older
   releases and again on macOS 27.3. Use **+** to select the actual built
   bundle if it is missing. If macOS identifies the native helper separately,
   add that executable using **Command+Shift+G** in the file picker. Its
   path inside the bundle is `Contents/MacOS/focused-text`. The app
   executable is `Contents/MacOS/my-audio-to-text`. [Apple's privacy settings update](https://developer.apple.com/news/?id=oqng0zjk).
+- If macOS asks for clipboard access, allow it so the helper can save and
+  restore the existing clipboard. [Apple's pasteboard access documentation](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum/default).
 - Quit from the app's menu and relaunch the same bundle after changing
   authorization. Repeat Start after any permission prompt. If the same
   denial persists after moving or rebuilding the ad-hoc-signed bundle,
@@ -145,18 +157,16 @@ using the [Apple Silicon build commands](#apple-silicon-macos).
 1. Prepare **Moonshine Small Streaming Japanese** in **Models** and wait
    for **Ready**. Select the default voice typing graph as the shortcut
    graph.
-2. Open a blank document in an editor you use or a browser page with a text
-   field. You can try an editor with limited Accessibility support if you
-   can type into it normally. For a local browser example, open
-   `data:text/html,<form><textarea>left%7Cright</textarea><input maxlength=6><input type=password><button>Submit</button></form>`
-   and place the caret after `|`.
-3. Press **Control+Option+Command+D**, wait for **Recording**, say
-   `こんにちは`, then press the same shortcut to Stop. Check that text
-   appears at the caret and the field stays focused. Try with selected text
-   or in the single-line field to see how the application handles replacement
-   or limits.
-4. During a separate run, move focus or choose **Cancel voice typing** from
-   the menu to check that pending text is discarded.
+2. Copy a short sample in the editor or browser so you can check clipboard
+   restoration. Focus an ordinary text field and place the caret or select
+   text to replace.
+3. Press **Control+Option+Command+D** and wait for **Recording**. Dictate
+   a few short phrases with pauses, such as `こんにちは` and `ありがとう`.
+   Check that successive chunks appear while you are still recording.
+4. Press the shortcut again to Stop. When the session finishes, use Paste in
+   a scratch field to confirm the original sample is still on the clipboard.
+   In a separate run you can move focus or choose **Cancel voice typing**
+   from the menu to check that pending chunks are discarded.
 
 ## Graphs and models
 
@@ -233,12 +243,11 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 The basic macOS check exercises the packaged management and Live renderers,
 native shortcut conflicts, residency after closing the window, and shortcut
 release at Quit. The suite also relaunches the package to verify Auto Save
-draft recovery. Dispatch fixtures use simulated Accessibility responses to
-exercise distinct application identities, selected-text and range editing,
-keyboard fallback with incomplete metadata, delayed input and clipboard
-preservation, native constraints, protected fields, order, focus changes,
-and cancellation. A fixture-owned WebKit window checks Unicode editing, length
-limits and a line break in a single-line form field.
+draft recovery. A controlled AppKit editor uses its native pasteboard
+reader with a private pasteboard and simulated delayed consumption. The tests
+exercise ordered committed chunks during recording, multi-item clipboard
+preservation, intervening copies, held modifiers, protection, focus changes,
+Stop, and cancellation without external keyboard-event authorization.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
 the app's microphone input. It temporarily selects BlackHole as the default
 input and restores the prior device.

@@ -2,12 +2,17 @@
 #import <WebKit/WebKit.h>
 #import <assert.h>
 
-// Exercise the installed WebKit editor in a fixture-owned window. AppKit's
-// AXReplaceRangeWithText selector delegates to this WebKit method. Driving
-// the same method here requires no cross-application accessibility access.
-@interface NSObject (WebKitRangeReplacement)
-- (BOOL)accessibilityReplaceRange:(NSRange)range withText:(NSString *)text;
+// The WebKit document view can paste directly from a private board.
+// This exercises its native editor without global key events or clipboard writes.
+@interface NSView (WebKitPaste)
+- (BOOL)readSelectionFromPasteboard:(NSPasteboard *)pasteboard;
 @end
+
+static void paste(NSView *document, NSPasteboard *clipboard, NSString *text) {
+    [clipboard clearContents];
+    assert([clipboard setString:text forType:NSPasteboardTypeString]);
+    assert([document readSelectionFromPasteboard:clipboard]);
+}
 
 @interface Driver : NSObject <WebFrameLoadDelegate>
 @property (strong) NSWindow *window;
@@ -18,32 +23,20 @@
 - (void)webView:(WebView *)web didFinishLoadForFrame:(WebFrame *)frame {
     if (frame != web.mainFrame) return;
     NSView *document = frame.frameView.documentView;
-    [self.window makeFirstResponder:document];
-
-    [web stringByEvaluatingJavaScriptFromString:@"notes.focus(); notes.setSelectionRange(5, 5)"];
-    id field = [document accessibilityFocusedUIElement];
-    assert([[field accessibilityAttributeValue:@"AXRole"] isEqual:@"AXTextArea"]);
-    assert([field accessibilityReplaceRange:NSMakeRange(5, 0) withText:@" 東京🙂\n か\u3099"]);
-    assert([[web stringByEvaluatingJavaScriptFromString:@"String(notes.value === 'left| 東京🙂\\n か\\u3099right' && "
-        "notes.selectionStart === 'left| 東京🙂\\n か\\u3099'.length && document.activeElement === notes)"] isEqual:@"true"]);
-
-    [web stringByEvaluatingJavaScriptFromString:
-        @"notes.setSelectionRange(5, 5); notes.addEventListener('beforeinput', () => other.focus(), {once:true})"];
-    assert([field accessibilityReplaceRange:NSMakeRange(5, 0) withText:@"再"]);
-    assert([[web stringByEvaluatingJavaScriptFromString:
-        @"String(notes.value === 'left|再 東京🙂\\n か\\u3099right' && other.value === 'untouched')"] isEqual:@"true"]);
+    assert([self.window makeFirstResponder:document]);
+    NSPasteboard *clipboard = [NSPasteboard pasteboardWithUniqueName];
 
     [web stringByEvaluatingJavaScriptFromString:@"limited.focus(); limited.setSelectionRange(1, 1)"];
-    field = [document accessibilityFocusedUIElement];
-    assert([field accessibilityReplaceRange:NSMakeRange(1, 0) withText:@"字🙂"]);
-    assert([[web stringByEvaluatingJavaScriptFromString:@"limited.value"] isEqual:@"x字y"]);
+    paste(document, clipboard, @"AB東京");
+    assert([[web stringByEvaluatingJavaScriptFromString:
+        @"String(limited.value === 'xABy' && limited.selectionStart === 3)"] isEqual:@"true"]);
 
     [web stringByEvaluatingJavaScriptFromString:@"single.focus(); single.setSelectionRange(1, 1)"];
-    field = [document accessibilityFocusedUIElement];
-    assert([field accessibilityReplaceRange:NSMakeRange(1, 0) withText:@"\n"]);
+    paste(document, clipboard, @"\n");
     assert([[web stringByEvaluatingJavaScriptFromString:
-        @"String(single.value === 'xy' && submits === 0 && other.value === 'untouched')"] isEqual:@"true"]);
-    exit(0);
+        @"String(document.activeElement === single && single.value === 'xy' && submits === 0)"] isEqual:@"true"]);
+    [clipboard releaseGlobally];
+    [NSApplication.sharedApplication stop:nil];
 }
 @end
 
@@ -56,11 +49,9 @@ int main(void) {
         driver.web = [[WebView alloc] initWithFrame:driver.window.contentView.bounds];
         driver.web.frameLoadDelegate = driver;
         driver.window.contentView = driver.web;
-        [driver.window makeKeyAndOrderFront:nil];
         [driver.web.mainFrame loadHTMLString:
-            @"<!doctype html><meta charset=utf-8><form><textarea id=notes>left|right</textarea>"
-            "<textarea id=limited maxlength=3>xy</textarea><input id=single value=xy>"
-            "<input id=other value=untouched><button>Submit</button></form>"
+            @"<!doctype html><meta charset=utf-8><form><textarea id=limited maxlength=4>xy</textarea>"
+            "<input id=single value=xy><button>Submit</button></form>"
             "<script>var submits = 0; document.forms[0].onsubmit = event => { event.preventDefault(); submits++; };</script>"
             baseURL:nil];
         [app run];
