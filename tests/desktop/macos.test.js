@@ -8,10 +8,13 @@ import { createInterface } from 'node:readline';
 import { setTimeout as wait } from 'node:timers/promises';
 import { test } from 'node:test';
 import { _electron } from 'playwright';
+import { FocusedApplicationTextOutputNode } from '../../desktop/focused-output.js';
 import { FocusedTarget } from '../../desktop/focused-target.js';
 import { defaultDesktopGraph, FOCUSED_OUTPUT } from '../../desktop/graph.js';
 import { DesktopSession } from '../../desktop/session.js';
 import { edge, graphNode, GRAPH_VERSION } from '../../extension/graph.js';
+import { Pipeline } from '../../web/pipeline.js';
+import { TEXT } from '../../web/port-contracts.js';
 import { browserFixture } from './browser-fixture.js';
 
 const binary = resolve(process.env.DESKTOP_TEST_BINARY
@@ -217,17 +220,14 @@ async function compileDispatchFixture(t) {
   return tool;
 }
 
-test('macOS WebKit range replacement preserves Unicode and honors native field limits without submitting', async t => {
-  const directory = await temp(t, 'desktop-webkit-fixture-');
-  const tool = join(directory, 'webkit-fixture');
-  execFileSync('xcrun', ['clang', '-fobjc-arc', '-Wall', '-Wextra', '-Werror', '-Wno-deprecated-declarations',
-    '-framework', 'AppKit', '-framework', 'WebKit', 'tests/desktop/macos-webkit-fixture.m', '-o', tool]);
-  execFileSync(tool, { timeout: 10000 });
-});
+const plainText = 'public.utf8-plain-text';
+const originalClipboard = [
+  { [plainText]: 'existing', 'public.html': '<b>existing</b>' },
+  { 'net.example.binary': 'AP8=' },
+];
 
-async function dispatchFixture(t, operation, alternateApplication = false) {
-  const tool = await compileDispatchFixture(t);
-  const target = new FocusedTarget(tool, alternateApplication ? [operation, 'alternate'] : [operation], {
+function dispatchFixture(t, tool) {
+  const target = new FocusedTarget(tool, [], {
     onInvalid: (id, error) => { void controller.cancel(error, id); },
     onLost: () => {},
   });
@@ -248,399 +248,237 @@ async function dispatchFixture(t, operation, alternateApplication = false) {
     await target.request('fixture', null, options);
     return state;
   };
+  const dispatched = count => eventually(async () => {
+    const current = await configure();
+    return current.keyDowns === count && current;
+  }, 'The helper did not dispatch the expected number of pastes');
   const start = async () => {
     await target.request('snapshot-tray');
     await controller.start({ focused: true, microphone: false, displays: [], graph: {} }, 'bind-tray');
     return controller.current?.id;
   };
-  return { controller, configure, start, waiting: () => waiting,
-    focusReadPaused: () => focusReadPaused, resumeFocus: () => target.request('resume-focus') };
+  // The stdin reader signals the blocked AX call without waiting for main.
+  const resumeFocus = () => target.connect().process.stdin.write('{"action":"resume-focus"}\n');
+  return { controller, configure, dispatched, start, resumeFocus, waiting: () => waiting, focusReadPaused: () => focusReadPaused };
 }
 
-for (const operation of ['selected text', 'range', 'keyboard']) {
-  test(`macOS ${operation} Cancel during the final focus read prevents native edits`, async t => {
-    const { controller, configure, start, focusReadPaused, resumeFocus } = await dispatchFixture(t, operation);
+test('macOS clipboard paste', async t => {
+  const tool = await compileDispatchFixture(t);
+
+  await t.test('streams rapid committed TEXT through a delayed AppKit editor read', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    await configure({ frontPid: 200, noRole: true, noField: true, noWindow: true });
     const id = await start();
     assert.ok(id);
-    await configure({ pauseFinalFocus: true });
+    let source;
+    const pipeline = new Pipeline({
+      nodes: {
+        source: { outputs: { text: TEXT }, start(context) { source = context; } },
+        target: new FocusedApplicationTextOutputNode(text => controller.insert(id, text)),
+      },
+      connections: [edge('source', 'text', 'target', 'text')],
+    });
+    await pipeline.start();
+    t.after(() => pipeline.dispose());
+    const chunks = [' 東京🙂\n\t', ' 東京🙂\n\t', ' か\u3099 '];
+    source.emitOutputs({ text: 'unfinished hypothesis' }, { provisional: true });
+    source.emit('text', '');
+    for (const chunk of chunks) source.emit('text', chunk);
+    source.emitOutputs({ text: 'another hypothesis' }, { provisional: true });
 
-    const pending = assert.rejects(controller.insert(id, 'discard 東京🙂'), /changed or lost focus/);
-    const queued = assert.rejects(controller.insert(id, 'discard queued'), /no longer authorized/);
-    await eventually(focusReadPaused, 'The native adapter did not pause the final focus read');
+    let prefix = 'left';
+    for (const [index, chunk] of chunks.entries()) {
+      const staged = await dispatched(index + 1);
+      assert.equal(controller.state.phase, 'running');
+      assert.equal(staged.keyUps, index + 1);
+      assert.equal(staged.clipboard[0][plainText], chunk);
+      assert.deepEqual(staged.reads, chunks.slice(0, index));
+      assert.deepEqual((await configure({ advance: 149 })).reads, chunks.slice(0, index));
+
+      prefix += chunk;
+      const consumed = await configure({ advance: 1 });
+      assert.deepEqual(consumed.reads, chunks.slice(0, index + 1));
+      assert.equal(consumed.text, prefix + 'right');
+      assert.equal(consumed.clipboard[0][plainText], chunk);
+      const settled = await configure({ advance: 100 });
+      assert.deepEqual(settled.clipboard, originalClipboard);
+    }
+    await pipeline.stop();
+    await controller.stop();
+    assert.equal(controller.state.error, '');
+    assert.equal((await configure()).keyDowns, chunks.length);
+  });
+
+  await t.test('waits for modifiers and drains accepted chunks on Stop', async t => {
+    const { controller, configure, dispatched, start, waiting } = dispatchFixture(t, tool);
+    await configure({ clear: true });
+    const id = await start();
+    assert.ok(id);
+    await configure({ modifiers: true });
+    const first = controller.insert(id, 'one');
+    const second = controller.insert(id, 'two');
+    const stopped = controller.stop();
+    await eventually(waiting, 'The helper did not wait for modifier release');
+    const held = await configure({ advance: 1000 });
+    assert.deepEqual(held.clipboard, []);
+    assert.equal(held.keyDowns, 0);
+    assert.equal(controller.state.phase, 'stopping');
+    const released = await configure({ modifiers: false, advance: 100 });
+    assert.equal(released.keyDowns, 1);
+    await configure({ advance: 250 });
+    await first;
+    await dispatched(2);
+    await configure({ advance: 250 });
+    await second;
+    await stopped;
+    const state = await configure();
+    assert.deepEqual(state.reads, ['one', 'two']);
+    assert.deepEqual(state.clipboard, []);
+    assert.equal(controller.state.error, '');
+  });
+
+  await t.test('preserves a newer copy before dispatch and after dispatch', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    const id = await start();
+    const first = controller.insert(id, 'same text');
+    await dispatched(1);
+    await configure({ advance: 150 });
+    // Same text still creates a new generation with its own ownership.
+    await configure({ copy: 'same text', advance: 100 });
+    await first;
+    assert.deepEqual((await configure()).clipboard, [{ [plainText]: 'same text' }]);
+
+    await configure({ copyAfterStage: true });
+    await assert.rejects(controller.insert(id, 'discarded'), /clipboard changed before Paste/);
+    await controller.current?.canceling;
+    const state = await configure();
+    assert.deepEqual(state.clipboard, [{ [plainText]: 'copied before dispatch' }]);
+    assert.deepEqual(state.reads, ['same text']);
+    assert.equal(state.keyDowns, 1);
+  });
+
+  await t.test('protects the clipboard on read or stage failure and never retries an ambiguous paste', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    let id = await start();
+    await configure({ failSnapshot: true });
+    await assert.rejects(controller.insert(id, 'never staged'), /read the existing clipboard/);
+    await controller.current?.canceling;
+    assert.deepEqual((await configure()).clipboard, originalClipboard);
+
+    id = await start();
+    await configure({ failSnapshot: false, failStage: true });
+    await assert.rejects(controller.insert(id, 'never posted'), /stage text/);
+    await controller.current?.canceling;
+    const afterFailure = await configure({ failStage: false, failRestore: true });
+    assert.equal(afterFailure.keyDowns, 0);
+    assert.deepEqual(afterFailure.clipboard, originalClipboard);
+
+    id = await start();
+    const first = assert.rejects(controller.insert(id, 'already posted'), /restore the clipboard/);
+    const second = assert.rejects(controller.insert(id, 'queued'), /no longer authorized/);
+    await dispatched(1);
+    await configure({ advance: 250 });
+    await Promise.all([first, second]);
+    await controller.current?.canceling;
+    const state = await configure({ advance: 1000 });
+    assert.equal(state.keyDowns, 1);
+    assert.deepEqual(state.reads, ['already posted']);
+  });
+
+  await t.test('Cancel before dispatch restores staged data and drops pending text', async t => {
+    const { controller, configure, start, focusReadPaused, resumeFocus } = dispatchFixture(t, tool);
+    const id = await start();
+    await configure({ pauseAfterStage: true });
+    const first = assert.rejects(controller.insert(id, 'staged'), /changed or lost focus/);
+    const second = assert.rejects(controller.insert(id, 'queued'), /no longer authorized/);
+    await eventually(focusReadPaused, 'The helper did not reach its dispatch focus check');
     const canceled = controller.cancel();
-    await Promise.all([resumeFocus(), canceled, pending, queued]);
+    resumeFocus();
+    await Promise.all([first, second, canceled]);
+    const state = await configure({ advance: 1000 });
+    assert.equal(state.keyDowns, 0);
+    assert.deepEqual(state.clipboard, originalClipboard);
+  });
 
-    const state = { text: 'left|right', other: 'other', writes: 0, focused: 0 };
-    const before = await configure();
-    assert.deepEqual(before, {
-      ...state, ...(operation === 'range' ? { chunks: [] } : {}),
-      ...(operation === 'keyboard' ? { clipboard: before.clipboard, keyUps: 0 } : {}),
-    });
+  await t.test('Cancel after dispatch lets the editor read before restoring and drops queued text', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    const id = await start();
+    const first = controller.insert(id, 'already posted');
+    const second = assert.rejects(controller.insert(id, 'queued'), /no longer authorized/);
+    await dispatched(1);
+    const canceled = controller.cancel();
+    const beforeRead = await configure();
+    assert.equal(controller.state.phase, 'canceling');
+    assert.equal(beforeRead.clipboard[0][plainText], 'already posted');
+    await configure({ advance: 250 });
+    await Promise.all([first, second, canceled]);
+    const state = await configure();
+    assert.deepEqual(state.reads, ['already posted']);
+    assert.equal(state.keyDowns, 1);
+    assert.deepEqual(state.clipboard, originalClipboard);
+    assert.equal(controller.state.phase, 'idle');
+  });
 
-    const next = await start();
-    assert.ok(next);
-    await controller.insert(next, 'keep 東京🙂');
+  await t.test('lets the native editor reject Paste when Accessibility exposes no editing metadata', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    await configure({ noRole: true, editorEditable: false });
+    const id = await start();
+    assert.ok(id);
+    const pending = controller.insert(id, 'native constraint');
+    await dispatched(1);
+    const settled = await configure({ advance: 250 });
+    await pending;
     await controller.stop();
-    const inserted = { ...state, text: 'left|keep 東京🙂right', writes: 1 };
-    assert.deepEqual(await configure(), {
-      ...inserted, ...(operation === 'range' ? { chunks: ['keep 東京🙂'] } : {}),
-      ...(operation === 'keyboard' ? { clipboard: before.clipboard, keyUps: 1 } : {}),
-    });
-  });
-}
-
-test('macOS range replacement drains ordered Unicode through the range adapter and accepts a constrained edit', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'range');
-  let id = await start();
-  assert.ok(id);
-  const chunks = [' 東京', '\n', '🙂 か\u3099'];
-  const deliveries = chunks.map(text => controller.insert(id, text));
-  await controller.stop();
-  await Promise.all(deliveries);
-  const prefix = 'left|' + chunks.join('');
-  assert.deepEqual(await configure({ limit: 1, singleLine: true }), {
-    text: prefix + 'right', other: 'other', writes: 3, focused: 0, chunks,
+    assert.equal(settled.text, 'left|right');
+    assert.deepEqual(settled.reads, ['native constraint']);
+    assert.deepEqual(settled.clipboard, originalClipboard);
+    assert.equal((await configure()).keyDowns, 1);
+    assert.equal(controller.state.error, '');
   });
 
-  id = await start();
-  assert.ok(id);
-  await controller.insert(id, 'X字🙂');
-  await controller.stop();
-  assert.deepEqual(await configure(), {
-    text: prefix + 'Xright', other: 'other', writes: 4, focused: 0, chunks: [...chunks, 'X字🙂'],
-  });
-});
+  await t.test('refuses known protection and authorization failures at Start or dispatch', async t => {
+    const cases = [
+      ['protected', true, /protected/], ['secureInput', true, /Secure Keyboard Entry/],
+      ['disabled', true, /disabled/], ['readOnly', true, /read-only/], ['notEditable', true, /read-only/],
+      ['canPost', false, /post keyboard events/], ['trusted', false, /Accessibility/],
+    ];
+    for (const [option, value, error] of cases) {
+      const { controller, configure, start } = dispatchFixture(t, tool);
+      await configure({ [option]: value });
+      assert.equal(await start(), undefined);
+      assert.match(controller.state.error, error);
 
-test('macOS range replacement refuses protected fields and rechecks authorization at dispatch', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'range');
-  for (const [options, error] of [
-    [{ protectedField: true }, /protected/],
-    [{ readOnly: true }, /read-only/],
-    [{ disabledField: true }, /disabled/],
-    [{ notEditable: true }, /read-only/],
-    [{ denyAccessibility: true }, /Accessibility/],
-  ]) {
-    await configure(options);
-    assert.equal(await start(), undefined);
-    assert.match(controller.state.error, error);
-  }
-  for (const [options, error] of [
-    [{ readOnly: true }, /read-only/],
-    [{ protectedField: true }, /protected/],
-    [{ readOnlyOnSecondSelection: true }, /read-only/],
-    [{ denyAccessibilityOnSecondSelection: true }, /Accessibility/],
-    [{ switchOnSecondSelection: true }, /changed or lost focus/],
-  ]) {
-    await configure();
-    const id = await start();
-    assert.ok(id);
-    await configure(options);
-    await assert.rejects(controller.insert(id, 'never dispatch🙂'), error);
-    await controller.cancel();
-  }
-  assert.deepEqual(await configure(), {
-    text: 'left|right', other: 'other', writes: 0, focused: 1, chunks: [],
-  });
-});
-
-test('macOS range replacement refuses a stale replacement range when the caret moves within the focused field', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'range');
-  const id = await start();
-  assert.ok(id);
-  await configure({ selectionLength: 2, moveCaretOnFinalEditability: true });
-
-  await assert.rejects(controller.insert(id, '東京🙂'), /text or selection changed/);
-  await controller.cancel();
-  assert.deepEqual(await configure(), {
-    text: 'left|right', other: 'other', writes: 0, focused: 0, chunks: [],
-  });
-});
-
-test('macOS range replacement refuses a stale replacement range after a same-field value change', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'range');
-  const id = await start();
-  assert.ok(id);
-  await configure({ changeValueOnFinalEditability: true });
-
-  await assert.rejects(controller.insert(id, '東京🙂'), /text or selection changed/);
-  await controller.cancel();
-  assert.deepEqual(await configure(), {
-    text: 'left|RIGHT', other: 'other', writes: 0, focused: 0, chunks: [],
-  });
-});
-
-test('macOS range replacement refuses text or selection changes during dispatch protection checks', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'range');
-  for (const [change, text] of [
-    ['moveCaretOnFinalSubrole', 'left|right'],
-    ['changeValueOnFinalSubrole', 'new left|right'],
-  ]) {
-    const id = await start();
-    assert.ok(id);
-    await configure({ selectionLength: 2, [change]: true });
-
-    await assert.rejects(controller.insert(id, '東京🙂'), /text or selection changed/, change);
-    await controller.cancel();
-    assert.deepEqual(await configure(), { text, other: 'other', writes: 0, focused: 0, chunks: [] });
-  }
-});
-
-test('macOS range replacement discards cancelled deliveries and accepts a native no-op', async t => {
-  const { controller, configure, start, waiting } = await dispatchFixture(t, 'range');
-  await configure({ held: true });
-  let id = await start();
-  assert.ok(id);
-  const pending = assert.rejects(controller.insert(id, 'cancelled'), /changed or lost focus/);
-  await eventually(waiting, 'The browser adapter did not wait for modifier release');
-  await controller.cancel();
-  await pending;
-  await assert.rejects(controller.insert(id, 'stale'), /no longer authorized/);
-  assert.equal((await configure()).writes, 0);
-
-  id = await start();
-  assert.ok(id);
-  await configure({ singleLine: true });
-  const chunks = ['\n', 'keep'];
-  const deliveries = chunks.map(text => controller.insert(id, text));
-  await controller.stop();
-  await Promise.all(deliveries);
-  assert.deepEqual(await configure(), {
-    text: 'left|keepright', other: 'other', writes: 2, focused: 0, chunks,
-  });
-});
-
-test('macOS selected-text queue drains ordered commits and stops on a reported failure', async t => {
-  const { controller, configure, start, waiting } = await dispatchFixture(t, 'selected text');
-  await configure({ denyAccessibility: true });
-  assert.equal(await start(), undefined);
-  assert.match(controller.state.error, /Accessibility/);
-
-  await configure();
-  let id = await start();
-  assert.ok(id);
-  const chunks = [' 東京', '\n', '🙂 か\u3099'];
-  const pending = chunks.map(text => controller.insert(id, text));
-  await controller.stop();
-  await Promise.all(pending);
-  const inserted = { text: `left|${chunks.join('')}right`, other: 'other', writes: 3, focused: 0 };
-  assert.deepEqual(await configure(), inserted);
-
-  await configure({ held: true });
-  id = await start();
-  const pendingWhileHeld = assert.rejects(controller.insert(id, 'discard this'), /changed or lost focus/);
-  await eventually(waiting, 'The native adapter did not hold the pending edit');
-  await controller.cancel();
-  await pendingWhileHeld;
-  await assert.rejects(controller.insert(id, 'late callback'), /no longer authorized/);
-  assert.deepEqual(await configure({ failWrite: true }), inserted);
-
-  id = await start();
-  await Promise.all([
-    assert.rejects(controller.insert(id, 'failed delivery'), /rejected the Accessibility edit/),
-    assert.rejects(controller.insert(id, 'must stay queued'), /no longer authorized/),
-  ]);
-  await controller.cancel();
-  assert.deepEqual(await configure(), { ...inserted, writes: 4 });
-});
-
-test('macOS rejects settable selected text in a read-only field at bind and dispatch', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'selected text');
-  const field = { singleLine: true, selectionLength: 2 };
-  await configure({ ...field, readOnly: true });
-  assert.equal(await start(), undefined);
-  assert.match(controller.state.error, /read-only/);
-
-  await configure(field);
-  const id = await start();
-  assert.ok(id);
-  await configure({ ...field, readOnlyOnFinalEditability: true });
-  await assert.rejects(controller.insert(id, 'never dispatch'), /read-only/);
-  await controller.cancel();
-  assert.deepEqual(await configure(), { text: 'left|right', other: 'other', writes: 0, focused: 0 });
-});
-
-test('macOS replaces the selection in an editable combo box and refuses a read-only one', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'selected text');
-  const field = { comboBox: true, singleLine: true, selectionLength: 2 };
-  await configure({ ...field, readOnly: true });
-  assert.equal(await start(), undefined);
-  assert.match(controller.state.error, /read-only/);
-  assert.equal((await configure(field)).writes, 0);
-
-  const id = await start();
-  assert.ok(id);
-  await controller.insert(id, '東京🙂');
-  await controller.stop();
-  assert.deepEqual(await configure(), { text: 'left|東京🙂ght', other: 'other', writes: 1, focused: 0 });
-});
-
-test('macOS types into an autocomplete combo box with a writable value and selection range', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  const field = { comboBox: true, singleLine: true, writableSelectionRange: true };
-  const { clipboard } = await configure({ ...field, selectionLength: 2 });
-  const id = await start();
-  assert.ok(id);
-  await controller.insert(id, '東京🙂');
-  await controller.stop();
-  assert.deepEqual(await configure(), {
-    text: 'left|東京🙂ght', other: 'other', writes: 1, focused: 0, clipboard, keyUps: 1,
-  });
-});
-
-test('macOS sends native input when AX editability metadata is incomplete', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  const cases = [
-    { comboBox: true }, // No AXEditable or settable AXSelectedTextRange.
-    { noWritableValue: true },
-    { noEditingOperation: true, customRole: true },
-    { noRole: true },
-    { noFocusedWindow: true },
-    { noFocusedField: true },
-    { noFocusedWindow: true, noFocusedField: true },
-    { noFocusedWindow: true, noFocusedField: true, systemReportsField: true, fieldReportsWindow: true },
-  ];
-  const text = '東京🙂';
-  for (const [index, options] of cases.entries()) {
-    await configure(options);
-    const id = await start();
-    assert.ok(id, JSON.stringify(options));
-    await controller.insert(id, text);
-    await controller.stop();
-    const state = await configure(options);
-    assert.equal(state.text, `left|${text.repeat(index + 1)}right`);
-    assert.equal(state.keyUps, index + 1);
-    assert.equal(state.writes, index + 1);
-  }
-});
-
-test('macOS direct range editing falls back to keyboard input without AX selection data', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'range');
-  const id = await start();
-  assert.ok(id);
-  await configure({ noSelection: true, restoreSelectionAfterKeyPair: true });
-  const first = 'x'.repeat(20) + '東京🙂';
-  const next = ' 次';
-  const deliveries = [first, next].map(text => controller.insert(id, text));
-  await controller.stop();
-  await Promise.all(deliveries);
-  assert.deepEqual(await configure(), { text: `left|${first}${next}right`, other: 'other', writes: 3, focused: 0, chunks: [next] });
-});
-
-test('macOS native input rejects known protection and revoked keyboard permission with incomplete AX metadata', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  for (const [options, error] of [
-    [{ comboBox: true, readOnly: true, writableSelectionRange: true }, /read-only/],
-    [{ customRole: true, protectedField: true }, /protected/],
-    [{ noFocusedField: true, systemReportsField: true, disabledField: true }, /disabled/],
-    [{ noFocusedField: true, noFocusedWindow: true, secureInput: true }, /Secure Keyboard Entry/],
-    [{ noFocusedField: true, noFocusedWindow: true, denyAccessibility: true }, /Accessibility/],
-  ]) {
-    await configure(options);
-    assert.equal(await start(), undefined);
-    assert.match(controller.state.error, error);
-  }
-  const unknown = { noFocusedField: true, noFocusedWindow: true };
-  for (const [options, error] of [
-    [{ secureInput: true }, /Secure Keyboard Entry/],
-    [{ noFocusedField: false, protectedField: true }, /protected/],
-    [{ denyPostEvents: true }, /post keyboard events/],
-  ]) {
-    await configure(unknown);
-    const id = await start();
-    assert.ok(id);
-    await configure({ ...unknown, ...options });
-    await assert.rejects(controller.insert(id, 'never dispatch'), error);
-    await controller.cancel();
-  }
-  assert.equal((await configure()).writes, 0);
-});
-
-test('macOS native input stops on observed window, field or application changes with partial focus data', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  for (const [known, change] of [
-    [{ noFocusedField: true }, { focused: 1 }],
-    [{ noFocusedWindow: true }, { focused: 1 }],
-    [{ noFocusedField: true, noFocusedWindow: true, systemReportsField: true }, { focused: 1 }],
-    [{ noFocusedWindow: true }, { noFocusedField: true }],
-    [{ noFocusedField: true, noFocusedWindow: true }, { alternateApplication: true }],
-  ]) {
-    await configure({ ...known, focused: 0 });
-    const id = await start();
-    assert.ok(id);
-    await configure({ ...known, ...change });
-    await assert.rejects(controller.insert(id, 'never dispatch'), /changed or lost focus/);
-    await controller.cancel();
-  }
-  assert.equal((await configure()).writes, 0);
-});
-
-test('macOS native input posts no events when focus moves during the final field protection check', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  const { clipboard } = await configure({ sameWindow: true });
-  const id = await start();
-  assert.ok(id);
-  await configure({ sameWindow: true, switchOnFinalSubrole: true });
-
-  await assert.rejects(controller.insert(id, 'never dispatch'), /changed or lost focus/);
-  await controller.cancel();
-  assert.deepEqual(await configure(), {
-    text: 'left|right', other: 'other', writes: 0, focused: 1, clipboard, keyUps: 0,
-  });
-});
-
-test('macOS equivalent editable fields accept the same selected-text edit in unrelated apps', async t => {
-  const fixtures = await Promise.all([dispatchFixture(t, 'selected text'), dispatchFixture(t, 'selected text', true)]);
-  for (const { controller, configure, start } of fixtures) {
-    await configure({ singleLine: true, limit: 1, selectionLength: 2, noObserverNotifications: true });
-    const id = await start();
-    assert.ok(id);
-    await controller.insert(id, '\nAB');
-    await controller.stop();
-    assert.deepEqual(await configure(), { text: 'left|Aght', other: 'other', writes: 1, focused: 0 });
-  }
-});
-
-test('macOS delayed native input uses dictation text and preserves the clipboard', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'keyboard', true);
-  const original = (await configure({ denyPostEvents: true })).clipboard;
-  assert.equal(await start(), undefined);
-  assert.match(controller.state.error, /post keyboard events/);
-  assert.deepEqual(original, [
-    { 'public.utf8-plain-text': 'existing', 'public.html': '<b>existing</b>' },
-    { 'public.utf8-plain-text': 'second' },
-  ]);
-
-  await configure({ delayInput: true, singleLine: true, limit: 1, selectionLength: 2 });
-  let id = await start();
-  assert.ok(id);
-  await controller.insert(id, 'AB');
-  await controller.stop();
-  assert.deepEqual(await configure({ consumeInput: true, singleLine: true, limit: 1 }), {
-    text: 'left|Aght', other: 'other', writes: 1, focused: 0, clipboard: original, keyUps: 1,
+      await configure({ [option]: !value });
+      const id = await start();
+      assert.ok(id);
+      await configure({ [option]: value });
+      await assert.rejects(controller.insert(id, 'must not dispatch'), error);
+      await controller.current?.canceling;
+      const state = await configure();
+      assert.equal(state.keyDowns, 0);
+      assert.deepEqual(state.clipboard, originalClipboard);
+    }
   });
 
-  await configure({ delayInput: true });
-  id = await start();
-  assert.ok(id);
-  const prefix = 'x'.repeat(19);
-  await controller.insert(id, prefix + '🙂東京\r\nか\u3099\t字\x1b\x7f\uF700');
-  await controller.stop();
-  assert.deepEqual(await configure({ copyClipboard: 'new clipboard data', consumeInput: true }), {
-    text: `left|A${prefix}🙂東京 か\u3099 字ght`, other: 'other', writes: 3, focused: 0,
-    clipboard: [{ 'public.utf8-plain-text': 'new clipboard data' }], keyUps: 3,
-  });
-});
-
-test('macOS native input stops sending text when focus changes between keyboard events', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  const { clipboard } = await configure({ switchAfterKeyPair: true });
-  const id = await start();
-  assert.ok(id);
-  const prefix = 'x'.repeat(20);
-  await assert.rejects(controller.insert(id, prefix + 'discard'), /changed or lost focus/);
-  await controller.cancel();
-  assert.deepEqual(await configure(), {
-    text: `left|${prefix}right`, other: 'other', writes: 1, focused: 1, clipboard, keyUps: 1,
+  await t.test('stops on an observed app, window or field change', async t => {
+    const cases = [
+      [{ noField: true, noWindow: true }, { frontPid: 200 }],
+      [{ noField: true }, { focused: 1 }],
+      [{ noField: true, systemField: true, sameWindow: true }, { switchAfterStage: true }],
+    ];
+    for (const [initial, changed] of cases) {
+      const { controller, configure, start } = dispatchFixture(t, tool);
+      await configure(initial);
+      const id = await start();
+      assert.ok(id);
+      await configure(changed);
+      await assert.rejects(controller.insert(id, 'must not cross targets'), /changed or lost focus/);
+      await controller.current?.canceling;
+      const state = await configure();
+      assert.equal(state.keyDowns, 0);
+      assert.equal(state.other, 'other');
+      assert.deepEqual(state.clipboard, originalClipboard);
+    }
   });
 });
 
