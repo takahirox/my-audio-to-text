@@ -292,6 +292,7 @@ test('macOS clipboard paste', async t => {
       assert.equal(controller.state.phase, 'running');
       assert.equal(staged.keyUps, index + 1);
       assert.equal(staged.clipboard[0][plainText], chunk);
+      assert.equal(staged.currentHostOnly, true);
       assert.deepEqual(staged.reads, chunks.slice(0, index));
       assert.deepEqual((await configure({ advance: 149 })).reads, chunks.slice(0, index));
 
@@ -302,6 +303,7 @@ test('macOS clipboard paste', async t => {
       assert.equal(consumed.clipboard[0][plainText], chunk);
       const settled = await configure({ advance: 100 });
       assert.deepEqual(settled.clipboard, originalClipboard);
+      assert.equal(settled.currentHostOnly, true);
     }
     await pipeline.stop();
     await controller.stop();
@@ -513,6 +515,51 @@ test('macOS package launches, retains its shortcut after closing management, and
   assert.match(await reserve(defaultShortcut), /unavailable/);
   await desktop.close();
   assert.equal(await reserve(defaultShortcut), undefined);
+});
+
+test('macOS Quit waits for clipboard restoration when the helper is stalled after staging', {
+  timeout: 45000,
+}, async t => {
+  const tool = await compileDispatchFixture(t);
+  const quitReport = join(await temp(t, 'desktop-macos-quit-'), 'result.json');
+  const { desktop, management, view } = await launch(t);
+  await desktop.evaluate(({ app }, { tool, quitReport }) => {
+    const { createRequire } = process.getBuiltinModule('node:module');
+    const load = createRequire(`${app.getAppPath()}/package.json`);
+    const { DesktopSession } = load('./desktop/session.js');
+    const { createInterface } = process.getBuiltinModule('node:readline');
+    const start = DesktopSession.prototype.start;
+    DesktopSession.prototype.start = async function (plan) {
+      // Exercise the packaged Quit handler with a private clipboard and a
+      // controlled focus stall, without posting system-wide keyboard events.
+      this.target.onLost = () => {};
+      this.target.close();
+      this.target.command = tool;
+      const reader = createInterface({ input: this.target.connect().process.stdout });
+      reader.on('line', line => {
+        if (JSON.parse(line).focusReadPaused) globalThis.testFocusReadPaused = true;
+      });
+      await this.target.request('fixture', null, { pauseAfterStage: true, focusStallMs: 4000, quitReport });
+      await this.target.request('snapshot-tray');
+      await start.call(this, { ...plan, focused: true }, 'bind-tray');
+      const id = this.current.id;
+      void this.insert(id, 'staged during Quit').catch(() => {});
+      void this.insert(id, 'queued during Quit').catch(() => {});
+    };
+  }, { tool, quitReport });
+  await management.evaluate(async graph => {
+    const entry = await window.desktop.add('Quit clipboard test', graph);
+    await window.desktop.startLive(entry.id);
+  }, testGraph('Display', ''));
+  await eventually(() => desktop.evaluate(() => globalThis.testFocusReadPaused), 'The helper did not stall after staging');
+  assert.equal((await view()).session.phase, 'running');
+
+  await desktop.close();
+  const state = JSON.parse(await readFile(quitReport, 'utf8'));
+  assert.deepEqual(state.clipboard, originalClipboard);
+  assert.equal(state.currentHostOnly, true);
+  assert.equal(state.keyDowns, 0);
+  assert.equal(state.keyUps, 0);
 });
 
 test('macOS Live Cancel clears unfinished text, keeps committed text, and ignores stale deliveries', {

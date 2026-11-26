@@ -345,24 +345,22 @@ function bindIPC() {
 }
 
 app.on('window-all-closed', () => {});
-app.on('before-quit', event => {
+app.on('before-quit', async event => {
   if (shutDown || !controller) return;
   event.preventDefault();
   if (quitting) return;
   quitting = true;
   tray?.destroy();
   indicator?.hide();
-  const deadline = setTimeout(() => {
-    target.close();
-    shutDown = true;
-    app.quit();
-  }, 3000);
-  void Promise.allSettled([controller.cancel(), run('modelCancel')]).then(() => {
-    clearTimeout(deadline);
-    target.close();
-    shutDown = true;
-    app.quit();
-  });
+  let deadline;
+  const runtimeCleanup = Promise.race([
+    Promise.allSettled([controller.cancel(), run('modelCancel')]),
+    new Promise(resolve => { deadline = setTimeout(resolve, 3000); }),
+  ]).finally(() => clearTimeout(deadline));
+  await Promise.all([runtimeCleanup, mac && target.closeGracefully()]);
+  if (!mac) target.close();
+  shutDown = true;
+  app.quit();
 });
 
 if (!app.requestSingleInstanceLock()) app.quit();

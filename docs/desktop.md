@@ -103,17 +103,19 @@ staging text.
 Restoration checks the clipboard generation to preserve a newer copy. macOS
 provides neither an atomic clipboard swap nor confirmation that a field
 completed Paste. An app that reads very late or during a concurrent copy
-can receive different clipboard contents. Dictation stages text for the
-current Mac only and marks it as transient. Clipboard history or clipboard
-managers can still record the temporary text or restored items.
+can receive different clipboard contents. Dictation stages text and restores
+clipboard items for the current Mac only. It marks the temporary text as
+transient. Clipboard history or clipboard managers can still record the
+temporary text or restored items.
 
 A detected focus change or the loss of a previously verified identity stops
 the session and discards pending output. If macOS reports only the active
 application, changes within it may be invisible to the helper. Paste already
 in flight can reach a different field if focus changes after the final check.
 Stop drains accepted chunks while the target remains authorized. Cancel or
-Quit discards pending chunks and allows an already posted Paste to settle
-and clean up. Wait for the session to finish before switching fields or apps.
+Quit discards pending chunks and lets the helper finish clipboard cleanup,
+including the settling interval for an already posted Paste. Wait for the
+session to finish before switching fields or apps.
 
 On X11, the focused control must expose AT-SPI `Text` and `EditableText`
 interfaces. Place a caret in an editable span. AT-SPI inserts at the caret

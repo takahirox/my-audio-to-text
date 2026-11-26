@@ -300,7 +300,9 @@ static NSString *restoreClipboard(NSPasteboard *board, NSInteger generation, NSA
     // AppKit doesn't expose a compare-and-swap. Check ownership immediately
     // before claiming the board, and let an intervening owner keep its data.
     if (board.changeCount != generation) return nil;
-    NSInteger restoration = [board clearContents];
+    // The snapshot contains item data, but AppKit doesn't expose the original
+    // sharing options. Keep restored contents on this Mac.
+    NSInteger restoration = [board prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];
     if (!snapshot.count) return nil;
     if ([board writeObjects:snapshot] || board.changeCount != restoration) return nil;
     return restoreError;

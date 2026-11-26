@@ -33,7 +33,8 @@ export class FocusedTarget {
   }
 
   request(action, token, text) {
-    if (action === 'release' && !this.worker) return Promise.resolve();
+    if (action === 'release' && (!this.worker || this.closing)) return Promise.resolve();
+    if (this.closing) return Promise.reject(Error('Accessibility session closed.'));
     const worker = this.connect();
     const request = ++this.sequence;
     if (action === 'bind-shortcut' || action === 'bind-tray') worker.token = token;
@@ -58,7 +59,7 @@ export class FocusedTarget {
   disconnect(worker, error) {
     if (this.worker !== worker) return;
     this.worker = null;
-    worker.process.kill();
+    if (!this.closing) worker.process.kill();
     for (const complete of this.pending.values()) complete({ error });
     if (worker.token) this.onInvalid(worker.token, error);
     this.onLost(error);
@@ -66,5 +67,16 @@ export class FocusedTarget {
 
   close() {
     if (this.worker) this.disconnect(this.worker, 'Accessibility session closed.');
+  }
+
+  async closeGracefully() {
+    this.closing = true;
+    const child = this.worker?.process;
+    if (!child) return;
+    // EOF revokes dispatch on the native reader thread. The helper exits
+    // after cleanup, even if the renderer or a request has timed out.
+    const closed = new Promise(resolve => child.once('close', resolve));
+    child.stdin.end();
+    await closed;
   }
 }
