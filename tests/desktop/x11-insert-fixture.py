@@ -10,14 +10,29 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, "desktop")
 helper = runpy.run_path("desktop/x11-accessibility.py")
+Atspi = helper["Atspi"]
 
 
 class Field:
-    def __init__(self, can_advance=True):
+    def __init__(self, is_focused, can_advance=True):
         self.text = ""
         self.offset = 0
+        self.is_focused = is_focused
         self.can_advance = can_advance
         self.clear_cache = Mock()
+
+    def get_state_set(self):
+        states = [Atspi.StateType.EDITABLE, Atspi.StateType.ENABLED,
+                  Atspi.StateType.SENSITIVE, Atspi.StateType.SHOWING]
+        if self.is_focused(self):
+            states.append(Atspi.StateType.FOCUSED)
+        return Atspi.StateSet.new(states)
+
+    def get_role(self):
+        return Atspi.Role.ENTRY
+
+    def get_interfaces(self):
+        return ["EditableText", "Text"]
 
     def get_caret_offset(self):
         return self.offset
@@ -54,15 +69,13 @@ class InsertTest(unittest.TestCase):
         self.window = object()
         self.frame = Mock()
         self.frame.get_state_set().contains.return_value = True
-        self.field = Field()
+        self.field = self.new_field()
         self.focus.window = lambda: self.window
         self.focus.locate = lambda *_: (self.frame, self.field)
-        self.focus.editable = self.require_focused
         self.request("authorize")
 
-    def require_focused(self, field):
-        if field is not self.field:
-            raise helper["TargetError"]()
+    def new_field(self, can_advance=True):
+        return Field(lambda field: field is self.field, can_advance)
 
     def request(self, action, **fields):
         with redirect_stdout(io.StringIO()) as output:
@@ -70,7 +83,7 @@ class InsertTest(unittest.TestCase):
         self.assertEqual(json.loads(output.getvalue()), {"request": 1})
 
     def test_focus_changes_during_final_caret_query(self):
-        previous, current = self.field, Field()
+        previous, current = self.field, self.new_field()
         focus_by_query = iter((previous, current))
 
         def query_selections():
@@ -83,14 +96,42 @@ class InsertTest(unittest.TestCase):
         self.request("insert", text="next")
         self.assertEqual((previous.text, current.text), ("", "next"))
 
+    def test_field_changes_during_final_role_query(self):
+        previous, current = self.field, self.new_field()
+
+        def query_role():
+            self.field = current
+            return Atspi.Role.ENTRY
+
+        previous.get_role = query_role
+        self.request("insert", text="skip")
+        self.assertEqual((previous.text, current.text), ("", ""))
+        self.request("insert", text="next")
+        self.assertEqual((previous.text, current.text), ("", "next"))
+
+    def test_window_changes_during_final_interface_query(self):
+        previous, current = self.field, self.new_field()
+
+        def query_interfaces():
+            # AT-SPI can still report the old field as focused after X11 moves on.
+            self.window = object()
+            return ["EditableText", "Text"]
+
+        previous.get_interfaces = query_interfaces
+        self.request("insert", text="skip")
+        self.assertEqual((previous.text, current.text), ("", ""))
+        self.field = current
+        self.request("insert", text="next")
+        self.assertEqual((previous.text, current.text), ("", "next"))
+
     def test_rejected_caret_advance_skips_until_caret_moves(self):
-        blocked = self.field = Field(can_advance=False)
+        blocked = self.field = self.new_field(can_advance=False)
         self.request("insert", text="A")
         self.assertEqual((blocked.text, blocked.offset), ("A", 0))
         self.request("insert", text="B")
         self.assertEqual(blocked.text, "A")
 
-        other = self.field = Field()
+        other = self.field = self.new_field()
         self.request("insert", text="C")
         self.assertEqual(other.text, "C")
         self.field = blocked
@@ -128,7 +169,7 @@ class InsertTest(unittest.TestCase):
             insert.assert_called_once_with(0, "skip", 4)
         self.assertEqual((recovered.text, recovered.offset), ("", 0))
 
-        other = self.field = Field()
+        other = self.field = self.new_field()
         self.request("insert", text="other")
         self.assertEqual(other.text, "other")
         self.field = recovered

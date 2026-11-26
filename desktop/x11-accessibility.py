@@ -178,6 +178,10 @@ class Focus:
         # Focus events may still be queued while synchronous AT-SPI replies arrive.
         node.clear_cache()
         self.editable(node)
+        # Role and interface queries can outlast the state snapshot above.
+        node.clear_cache()
+        if not node.get_state_set().contains(Atspi.StateType.FOCUSED) or self.window() != window:
+            raise TargetError()
 
     def require_authorization(self, token):
         # Synchronous target discovery can delay the stdin watch. Read any
@@ -209,9 +213,9 @@ class Focus:
         if self.focus_is_settling():
             return False
         # Synchronous caret queries can run while the user changes focus.
+        length = len(text.encode("utf-8"))
         check_delivery_time(deadline)
         self.verify(window, frame, node)
-        length = len(text.encode("utf-8"))
         check_delivery_time(deadline)
         self.require_authorization(token)
         # A lost reply can leave an applied edit at the original caret.
