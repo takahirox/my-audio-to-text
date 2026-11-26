@@ -58,6 +58,7 @@ static NSUInteger focused;
 static BOOL switchOnSecondSelection;
 static BOOL readOnlyOnSecondSelection;
 static BOOL denyAccessibilityOnSecondSelection;
+static BOOL readOnlyOnFinalEditability;
 static BOOL moveCaretOnFinalEditability;
 static BOOL changeValueOnFinalEditability;
 static BOOL pauseFinalFocus;
@@ -111,6 +112,7 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
 
 static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *allowed) {
     if (CFEqual(key, kAXValueAttribute) && ++editabilityChecks == 2) {
+        if (readOnlyOnFinalEditability) readOnly = YES;
         if (moveCaretOnFinalEditability) {
             moveCaretOnFinalEditability = NO;
             selection = CFRangeMake(2, 0);
@@ -120,8 +122,10 @@ static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *al
             documents[0] = @"left|RIGHT";
         }
     }
-    *allowed = (__bridge id)element == fields[0] && !readOnly && !noEditingOperation &&
-        CFEqual(key, (browser || keyboardOnly) ? kAXValueAttribute : kAXSelectedTextAttribute);
+    // In a read-only WebKit text input, AXSelectedText can still be settable.
+    *allowed = (__bridge id)element == fields[0] && !noEditingOperation &&
+        ((!readOnly && CFEqual(key, kAXValueAttribute)) ||
+         (!browser && !keyboardOnly && CFEqual(key, kAXSelectedTextAttribute)));
     return kAXErrorSuccess;
 }
 
@@ -248,6 +252,7 @@ static void handleFixture(NSDictionary *message) {
     switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
     readOnlyOnSecondSelection = [options[@"readOnlyOnSecondSelection"] boolValue];
     denyAccessibilityOnSecondSelection = [options[@"denyAccessibilityOnSecondSelection"] boolValue];
+    readOnlyOnFinalEditability = [options[@"readOnlyOnFinalEditability"] boolValue];
     moveCaretOnFinalEditability = [options[@"moveCaretOnFinalEditability"] boolValue];
     changeValueOnFinalEditability = [options[@"changeValueOnFinalEditability"] boolValue];
     if (options[@"selectionLength"]) selection.length = [options[@"selectionLength"] integerValue];
