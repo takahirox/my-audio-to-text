@@ -27,6 +27,7 @@ static BOOL switchAfterKeyPair;
 static NSMutableArray<dispatch_block_t> *delayedInput;
 static BOOL noObserverNotifications;
 static BOOL comboBox;
+static BOOL writableSelectionRange;
 static BOOL singleLine;
 static BOOL protectedField;
 static BOOL noEditingOperation;
@@ -127,6 +128,7 @@ static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *al
     // In a read-only WebKit text input, AXSelectedText can still be settable.
     *allowed = (__bridge id)element == fields[0] && !noEditingOperation &&
         ((!readOnly && CFEqual(key, kAXValueAttribute)) ||
+         (writableSelectionRange && CFEqual(key, kAXSelectedTextRangeAttribute)) ||
          (!browser && !keyboardOnly && CFEqual(key, kAXSelectedTextAttribute)));
     return kAXErrorSuccess;
 }
@@ -243,6 +245,7 @@ static void handleFixture(NSDictionary *message) {
     }
     NSDictionary *options = message[@"text"];
     comboBox = [options[@"comboBox"] boolValue];
+    writableSelectionRange = [options[@"writableSelectionRange"] boolValue];
     singleLine = [options[@"singleLine"] boolValue];
     protectedField = [options[@"protectedField"] boolValue];
     disabledField = [options[@"disabledField"] boolValue];
