@@ -41,6 +41,7 @@ class Focus:
         self.active_atom = self.x.intern_atom("_NET_ACTIVE_WINDOW")
         self.pid_atom = self.x.intern_atom("_NET_WM_PID")
         self.token = None
+        self.unadvanced_carets = {}
         self.shortcut_context = 0
         self.held_context = 0
         self.focus_settles_at = 0
@@ -163,6 +164,8 @@ class Focus:
     def verify(self, window, frame, node):
         if self.window() != window or not frame.get_state_set().contains(Atspi.StateType.ACTIVE):
             raise TargetError()
+        # Focus events may still be queued while synchronous AT-SPI replies arrive.
+        node.clear_cache()
         self.editable(node)
 
     def require_authorization(self, token):
@@ -178,22 +181,30 @@ class Focus:
         window = self.window()
         frame, node = self.locate(window)
         offset, before = self.caret(node)
+        if self.unadvanced_carets.get(node) == offset:
+            raise TargetError()
+        if self.caret(node) != (offset, before):
+            raise TargetError()
         self.x_event()
         if self.focus_is_settling():
             return False
+        # Synchronous caret queries can run while the user changes focus.
         self.verify(window, frame, node)
-        if self.caret(node) != (offset, before):
-            raise TargetError()
         length = len(text.encode("utf-8"))
         self.require_authorization(token)
+        self.unadvanced_carets.pop(node, None)
         if node.insert_text(offset, text, length):
-            # Some implementations leave the caret in place. Advance by the
-            # actual insertion length, including any native filtering.
+            # Until advancement is confirmed, skip later chunks at this
+            # offset so they cannot land ahead of the text just inserted.
+            self.unadvanced_carets[node] = offset
             inserted = node.get_character_count() - before
-            if inserted > 0 and node.get_caret_offset() == offset and not node.get_n_selections():
+            if inserted <= 0 or node.get_caret_offset() != offset:
+                del self.unadvanced_carets[node]
+            elif not node.get_n_selections():
                 self.verify(window, frame, node)
                 self.require_authorization(token)
-                node.set_caret_offset(offset + inserted)
+                if node.set_caret_offset(offset + inserted):
+                    del self.unadvanced_carets[node]
         return True
 
     def x_event(self, *_args):
@@ -260,6 +271,7 @@ class Focus:
             elif action == "release":
                 if token == self.token:
                     self.token = None
+                    self.unadvanced_carets.clear()
             elif action == "set-shortcut":
                 self.shortcut.set(message["text"])
             else:

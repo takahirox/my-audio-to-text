@@ -184,6 +184,12 @@ test('Cancel during X11 target lookup revokes the pending edit', () => {
   ]);
 });
 
+test('X11 edits recheck focus and preserve chunk order when caret advancement fails', () => {
+  execFileSync('/usr/bin/python3', ['-B', 'tests/desktop/x11-insert-fixture.py'], {
+    encoding: 'utf8', timeout: 5000,
+  });
+});
+
 test('packaged app uses the real tray, editor, shortcut and focused desktop controls', { timeout: 150000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-x11-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
