@@ -16,10 +16,9 @@ class TargetError(Exception):
     pass
 
 
-NO_TARGET = "Focus an editable plain-text field in a supported GTK editor and try again."
+NO_TARGET = "Focus an editable text field that exposes AT-SPI editing and try again."
 LOST_TARGET = "Voice typing stopped because the authorized text field lost focus, changed, or closed."
-UNEDITABLE_CARET = "Place the caret in an editable plain-text region and try again."
-UNKNOWN_GTK_BUFFER = "Use a Mousepad document. Accessibility cannot verify that this GTK buffer accepts whole edits."
+UNEDITABLE_CARET = "Place the caret in an editable text region and try again."
 FOCUS_SETTLE_MS = 75
 
 
@@ -92,47 +91,29 @@ class Focus:
             raise TargetError(NO_TARGET)
         if not {"EditableText", "Text"}.issubset(node.get_interfaces()):
             raise TargetError(NO_TARGET)
-        return states
 
     @staticmethod
-    def caret(node, states):
-        if node.get_toolkit_name() != "gtk":
-            raise TargetError(NO_TARGET)
+    def caret(node):
         offset = node.get_caret_offset()
         count = node.get_character_count()
-        if offset < 0 or offset > count or node.get_n_selections():
-            raise TargetError("Place a caret with no text selected in the authorized field.")
-
-        if not states.contains(Atspi.StateType.MULTI_LINE):
-            raise TargetError("Use a GTK plain-text editor view. GTK entries may limit text length.")
-
-        # GtkTextView exposes GtkTextTag editability through AT-SPI. Check
-        # the runs on both sides, since an insertion can meet a tag boundary.
-        neighbors = [index for index in (offset - 1, offset) if 0 <= index < count]
-        default = node.get_default_attributes().get("editable")
-        if default != "true":
+        if offset < 0 or offset > count:
             raise TargetError(UNEDITABLE_CARET)
-        for index in neighbors:
-            attributes, start, end = node.get_attribute_run(index, False)
-            if not start <= index < end or attributes.get("editable", default) != "true":
-                raise TargetError(UNEDITABLE_CARET)
-        return offset
+        if node.get_n_selections():
+            raise TargetError("Place a caret with no text selected. AT-SPI insertion cannot replace the selection.")
 
-    @staticmethod
-    def whole_edit_supported(window):
-        # AT-SPI exposes neither GtkTextBuffer's insert-text signal handlers
-        # nor their limits. Accept the tested stock editor's document buffer.
-        try:
-            supported = os.path.samefile(f"/proc/{window[1]}/exe", "/usr/bin/mousepad")
-        except OSError:
-            supported = False
-        if not supported:
-            raise TargetError(UNKNOWN_GTK_BUFFER)
+        # The editable state covers the control. Explicit run attributes
+        # can additionally mark locked spans on either side of the caret.
+        for index in (offset - 1, offset):
+            if 0 <= index < count:
+                attributes, _, _ = node.get_attribute_run(index, False)
+                if (attributes or {}).get("editable") == "false":
+                    raise TargetError(UNEDITABLE_CARET)
+        return offset, count
 
     def locate(self, window):
         frames = []
         for app in children(Atspi.get_desktop(0)):
-            if app is not None and app.get_process_id() == window[1] and app.get_toolkit_name() == "gtk":
+            if app is not None and app.get_process_id() == window[1]:
                 frames.extend(frame for frame in children(app) if frame is not None
                               and frame.get_state_set().contains(Atspi.StateType.ACTIVE))
         if len(frames) != 1:
@@ -202,8 +183,7 @@ class Focus:
         frame, focused = self.locate(window)
         if not same_node(focused, expected[1]):
             raise TargetError(LOST_TARGET)
-        self.caret(focused, self.editable(focused))
-        self.whole_edit_supported(window)
+        self.caret(focused)
         self.bound = (token, window, frame, focused)
 
     def bind_after_grab(self, token, action, release, reply):
@@ -250,8 +230,8 @@ class Focus:
         _, window, frame, node = self.bound
         try:
             if self.window() == window and frame.get_state_set().contains(Atspi.StateType.ACTIVE):
-                self.whole_edit_supported(window)
-                return node, self.editable(node)
+                self.editable(node)
+                return node
         except (TargetError, GLib.Error, error.XError) as failure:
             raise TargetError(LOST_TARGET) from failure
         raise TargetError(LOST_TARGET)
@@ -275,7 +255,8 @@ class Focus:
                         send({**reply, "waiting": True})
                         next_update = now + 1
                     return True
-                self.insert(token, text)
+                if not self.insert(token, text):
+                    return True
             except TargetError as failure:
                 reply["error"] = str(failure)
             except Exception:
@@ -289,31 +270,30 @@ class Focus:
             GLib.timeout_add(FOCUS_SETTLE_MS, settle)
 
     def insert(self, token, text):
-        node, states = self.current(token)
-        offset = self.caret(node, states)
-        before = node.get_character_count()
         if "\0" in text:
             raise TargetError("The accessibility service cannot insert null characters.")
-        _, states = self.current(token)
-        if self.caret(node, states) != offset:
+        node = self.current(token)
+        offset, before = self.caret(node)
+        if self.caret(self.current(token)) != (offset, before):
             raise TargetError(LOST_TARGET)
-        acknowledged = node.insert_text(offset, text, len(text.encode("utf-8")))
-        # Verify the effect of the edit without retrying the mutation itself.
-        deadline = time.monotonic() + 0.65
-        while True:
-            self.current(token)
-            count = node.get_character_count()
-            end = offset + count - before
-            if end == offset + len(text) and node.get_text(offset, end) == text:
-                break
-            if time.monotonic() >= deadline:
-                raise TargetError("The field did not preserve the inserted text exactly. Voice typing stopped.")
-            if not acknowledged and end == offset:
-                raise TargetError("The authorized field rejected text insertion.")
-            time.sleep(0.02)
+        self.x_event()
+        if self.focus_is_settling():
+            return False
         self.current(token)
-        if node.get_caret_offset() != end and not node.set_caret_offset(end):
-            raise TargetError("The field could not advance its caret. Voice typing stopped.")
+        if not node.insert_text(offset, text, len(text.encode("utf-8"))):
+            raise TargetError("The authorized field rejected text insertion.")
+
+        # Some implementations insert at the offset without advancing the
+        # caret. Use the actual character count after any native filtering,
+        # and leave a caret the target already moved where it placed it.
+        self.x_event()
+        self.current(token)
+        inserted = node.get_character_count() - before
+        if inserted > 0 and node.get_caret_offset() == offset and not node.get_n_selections():
+            self.current(token)
+            if not node.set_caret_offset(offset + inserted):
+                raise TargetError("The field could not advance its caret. Voice typing stopped.")
+        return True
 
     def release(self, token):
         if self.binding and token == self.binding[0]:

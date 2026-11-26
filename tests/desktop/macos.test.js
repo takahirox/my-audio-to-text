@@ -53,6 +53,12 @@ async function launch(t, existingProfile) {
   assert.deepEqual(await desktop.evaluate(({ app }) => ({
     packaged: app.isPackaged, profile: app.getPath('userData'), name: app.getName(),
   })), { packaged: true, profile: await realpath(profile), name: 'My Audio to Text' });
+  // The renderer can load before the tray and shortcut have initialized.
+  await eventually(
+    () => desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+      .some(window => window.webContents.getURL().endsWith('/management.html') && window.isVisible())),
+    'The packaged app did not show the management window',
+  );
   const view = () => management.evaluate(() => window.desktop.get());
   return { desktop, management, view, profile };
 }
@@ -211,12 +217,6 @@ async function compileDispatchFixture(t) {
   return tool;
 }
 
-test('macOS dispatch rechecks the bound window and field after reading the selection', async t => {
-  const tool = await compileDispatchFixture(t);
-  const results = execFileSync(tool, { encoding: 'utf8', timeout: 5000 }).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(results, [{ request: 1, error: 'The authorized window or text field changed or lost focus.' }, { request: 2 }]);
-});
-
 test('macOS WebKit range replacement preserves Unicode and honors native field limits without submitting', async t => {
   const directory = await temp(t, 'desktop-webkit-fixture-');
   const tool = join(directory, 'webkit-fixture');
@@ -225,9 +225,9 @@ test('macOS WebKit range replacement preserves Unicode and honors native field l
   execFileSync(tool, { timeout: 10000 });
 });
 
-async function dispatchFixture(t, application) {
+async function dispatchFixture(t, operation, alternateApplication = false) {
   const tool = await compileDispatchFixture(t);
-  const target = new FocusedTarget(tool, [application], {
+  const target = new FocusedTarget(tool, alternateApplication ? [operation, 'alternate'] : [operation], {
     onInvalid: (id, error) => { void controller.cancel(error, id); },
     onLost: () => {},
   });
@@ -257,9 +257,9 @@ async function dispatchFixture(t, application) {
     focusReadPaused: () => focusReadPaused, resumeFocus: () => target.request('resume-focus') };
 }
 
-for (const [adapter, application] of [['TextEdit', 'textedit'], ['Safari', 'browser']]) {
-  test(`macOS ${adapter} Cancel during the final focus read prevents native edits`, async t => {
-    const { controller, configure, start, focusReadPaused, resumeFocus } = await dispatchFixture(t, application);
+for (const operation of ['selected text', 'range', 'keyboard']) {
+  test(`macOS ${operation} Cancel during the final focus read prevents native edits`, async t => {
+    const { controller, configure, start, focusReadPaused, resumeFocus } = await dispatchFixture(t, operation);
     const id = await start();
     assert.ok(id);
     await configure({ pauseFinalFocus: true });
@@ -271,19 +271,26 @@ for (const [adapter, application] of [['TextEdit', 'textedit'], ['Safari', 'brow
     await Promise.all([resumeFocus(), canceled, pending, queued]);
 
     const state = { text: 'left|right', other: 'other', writes: 0, focused: 0 };
-    assert.deepEqual(await configure(), application === 'browser' ? { ...state, chunks: [] } : state);
+    const before = await configure();
+    assert.deepEqual(before, {
+      ...state, ...(operation === 'range' ? { chunks: [] } : {}),
+      ...(operation === 'keyboard' ? { clipboard: before.clipboard, keyUps: 0 } : {}),
+    });
 
     const next = await start();
     assert.ok(next);
     await controller.insert(next, 'keep 東京🙂');
     await controller.stop();
     const inserted = { ...state, text: 'left|keep 東京🙂right', writes: 1 };
-    assert.deepEqual(await configure(), application === 'browser' ? { ...inserted, chunks: ['keep 東京🙂'] } : inserted);
+    assert.deepEqual(await configure(), {
+      ...inserted, ...(operation === 'range' ? { chunks: ['keep 東京🙂'] } : {}),
+      ...(operation === 'keyboard' ? { clipboard: before.clipboard, keyUps: 1 } : {}),
+    });
   });
 }
 
-test('macOS Safari drains ordered Unicode through the range adapter and accepts a constrained edit', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'browser');
+test('macOS range replacement drains ordered Unicode through the range adapter and accepts a constrained edit', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'range');
   let id = await start();
   assert.ok(id);
   const chunks = [' 東京', '\n', '🙂 か\u3099'];
@@ -304,12 +311,13 @@ test('macOS Safari drains ordered Unicode through the range adapter and accepts 
   });
 });
 
-test('macOS Safari refuses protected, read-only and unsupported fields and rechecks authorization at dispatch', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'browser');
+test('macOS range replacement refuses protected, read-only and unsupported fields and rechecks authorization at dispatch', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'range');
   for (const [options, error] of [
-    [{ protectedField: true }, /cannot be safely edited/],
-    [{ readOnly: true }, /cannot be safely edited/],
-    [{ noRangeReplacement: true }, /cannot be safely edited/],
+    [{ protectedField: true }, /exposes Accessibility editing/],
+    [{ readOnly: true }, /exposes Accessibility editing/],
+    [{ disabledField: true }, /exposes Accessibility editing/],
+    [{ noEditingOperation: true }, /exposes Accessibility editing/],
     [{ denyAccessibility: true }, /Accessibility/],
   ]) {
     await configure(options);
@@ -317,9 +325,9 @@ test('macOS Safari refuses protected, read-only and unsupported fields and reche
     assert.match(controller.state.error, error);
   }
   for (const [options, error] of [
-    [{ readOnly: true }, /cannot be safely edited/],
-    [{ protectedField: true }, /cannot be safely edited/],
-    [{ readOnlyOnSecondSelection: true }, /cannot be safely edited/],
+    [{ readOnly: true }, /exposes Accessibility editing/],
+    [{ protectedField: true }, /exposes Accessibility editing/],
+    [{ readOnlyOnSecondSelection: true }, /exposes Accessibility editing/],
     [{ denyAccessibilityOnSecondSelection: true }, /Accessibility/],
     [{ switchOnSecondSelection: true }, /changed or lost focus/],
   ]) {
@@ -335,8 +343,8 @@ test('macOS Safari refuses protected, read-only and unsupported fields and reche
   });
 });
 
-test('macOS Safari refuses a stale replacement range when the caret moves within the focused field', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'browser');
+test('macOS range replacement refuses a stale replacement range when the caret moves within the focused field', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'range');
   const id = await start();
   assert.ok(id);
   await configure({ selectionLength: 2, moveCaretOnFinalEditability: true });
@@ -348,8 +356,8 @@ test('macOS Safari refuses a stale replacement range when the caret moves within
   });
 });
 
-test('macOS Safari refuses a stale replacement range after a same-field value change', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'browser');
+test('macOS range replacement refuses a stale replacement range after a same-field value change', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'range');
   const id = await start();
   assert.ok(id);
   await configure({ changeValueOnFinalEditability: true });
@@ -361,8 +369,8 @@ test('macOS Safari refuses a stale replacement range after a same-field value ch
   });
 });
 
-test('macOS Safari discards cancelled deliveries and stops on ambiguity without retry', async t => {
-  const { controller, configure, start, waiting } = await dispatchFixture(t, 'browser');
+test('macOS range replacement discards cancelled deliveries and accepts a native no-op', async t => {
+  const { controller, configure, start, waiting } = await dispatchFixture(t, 'range');
   await configure({ held: true });
   let id = await start();
   assert.ok(id);
@@ -375,27 +383,21 @@ test('macOS Safari discards cancelled deliveries and stops on ambiguity without 
 
   id = await start();
   assert.ok(id);
-  await configure({ moveCaretOnly: true });
-  const chunk = 'ambiguous';
-  await Promise.all([
-    assert.rejects(controller.insert(id, chunk), /did not confirm/),
-    assert.rejects(controller.insert(id, 'must stay queued'), /no longer authorized/),
-  ]);
-  await controller.cancel();
+  await configure({ singleLine: true });
+  const chunks = ['\n', 'keep'];
+  const deliveries = chunks.map(text => controller.insert(id, text));
+  await controller.stop();
+  await Promise.all(deliveries);
   assert.deepEqual(await configure(), {
-    text: 'left|right', other: 'other', writes: 1, focused: 0, chunks: [chunk],
+    text: 'left|keepright', other: 'other', writes: 2, focused: 0, chunks,
   });
 });
 
-test('macOS TextEdit queue drains ordered commits and stops on an unconfirmed write', async t => {
-  const { controller, configure, start, waiting } = await dispatchFixture(t, 'textedit');
-  for (const [options, error] of [
-    [{ denyAccessibility: true }, /Accessibility/], [{ readOnly: true }, /cannot be safely edited/],
-  ]) {
-    await configure(options);
-    assert.equal(await start(), undefined);
-    assert.match(controller.state.error, error);
-  }
+test('macOS selected-text queue drains ordered commits and stops on a reported failure', async t => {
+  const { controller, configure, start, waiting } = await dispatchFixture(t, 'selected text');
+  await configure({ denyAccessibility: true });
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /Accessibility/);
 
   await configure();
   let id = await start();
@@ -414,15 +416,125 @@ test('macOS TextEdit queue drains ordered commits and stops on an unconfirmed wr
   await controller.cancel();
   await pendingWhileHeld;
   await assert.rejects(controller.insert(id, 'late callback'), /no longer authorized/);
-  assert.deepEqual(await configure({ dropWrite: true }), inserted);
+  assert.deepEqual(await configure({ failWrite: true }), inserted);
 
   id = await start();
   await Promise.all([
-    assert.rejects(controller.insert(id, 'ambiguous delivery'), /did not confirm/),
+    assert.rejects(controller.insert(id, 'failed delivery'), /rejected the Accessibility edit/),
     assert.rejects(controller.insert(id, 'must stay queued'), /no longer authorized/),
   ]);
   await controller.cancel();
   assert.deepEqual(await configure(), { ...inserted, writes: 4 });
+});
+
+test('macOS rejects settable selected text in a read-only field at bind and dispatch', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'selected text');
+  const field = { singleLine: true, selectionLength: 2 };
+  await configure({ ...field, readOnly: true });
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /exposes Accessibility editing/);
+
+  await configure(field);
+  const id = await start();
+  assert.ok(id);
+  await configure({ ...field, readOnlyOnFinalEditability: true });
+  await assert.rejects(controller.insert(id, 'never dispatch'), /exposes Accessibility editing/);
+  await controller.cancel();
+  assert.deepEqual(await configure(), { text: 'left|right', other: 'other', writes: 0, focused: 0 });
+});
+
+test('macOS replaces the selection in an editable combo box and refuses a read-only one', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'selected text');
+  const field = { comboBox: true, singleLine: true, selectionLength: 2 };
+  await configure({ ...field, readOnly: true });
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /exposes Accessibility editing/);
+  assert.equal((await configure(field)).writes, 0);
+
+  const id = await start();
+  assert.ok(id);
+  await controller.insert(id, '東京🙂');
+  await controller.stop();
+  assert.deepEqual(await configure(), { text: 'left|東京🙂ght', other: 'other', writes: 1, focused: 0 });
+});
+
+test('macOS types into an autocomplete combo box with a writable value and selection range', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  const field = { comboBox: true, singleLine: true, writableSelectionRange: true };
+  const { clipboard } = await configure({ ...field, selectionLength: 2 });
+  const id = await start();
+  assert.ok(id);
+  await controller.insert(id, '東京🙂');
+  await controller.stop();
+  assert.deepEqual(await configure(), {
+    text: 'left|東京🙂ght', other: 'other', writes: 1, focused: 0, clipboard, keyUps: 1,
+  });
+});
+
+test('macOS refuses keyboard input in selection-only and read-only combo boxes', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  for (const field of [{}, { readOnly: true, writableSelectionRange: true }]) {
+    await configure({ comboBox: true, ...field });
+    assert.equal(await start(), undefined);
+    assert.match(controller.state.error, /exposes Accessibility editing/);
+  }
+  assert.equal((await configure()).writes, 0);
+});
+
+test('macOS equivalent editable fields accept the same selected-text edit in unrelated apps', async t => {
+  const fixtures = await Promise.all([dispatchFixture(t, 'selected text'), dispatchFixture(t, 'selected text', true)]);
+  for (const { controller, configure, start } of fixtures) {
+    await configure({ singleLine: true, limit: 1, selectionLength: 2, noObserverNotifications: true });
+    const id = await start();
+    assert.ok(id);
+    await controller.insert(id, '\nAB');
+    await controller.stop();
+    assert.deepEqual(await configure(), { text: 'left|Aght', other: 'other', writes: 1, focused: 0 });
+  }
+});
+
+test('macOS delayed native input uses dictation text and preserves the clipboard', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard', true);
+  const original = (await configure({ denyPostEvents: true })).clipboard;
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /post keyboard events/);
+  assert.deepEqual(original, [
+    { 'public.utf8-plain-text': 'existing', 'public.html': '<b>existing</b>' },
+    { 'public.utf8-plain-text': 'second' },
+  ]);
+
+  await configure({ delayInput: true, singleLine: true, limit: 1, selectionLength: 2 });
+  let id = await start();
+  assert.ok(id);
+  await controller.insert(id, 'AB');
+  await controller.stop();
+  assert.deepEqual(await configure({ consumeInput: true, singleLine: true, limit: 1 }), {
+    text: 'left|Aght', other: 'other', writes: 1, focused: 0, clipboard: original, keyUps: 1,
+  });
+
+  await configure({ delayInput: true });
+  id = await start();
+  assert.ok(id);
+  const prefix = 'x'.repeat(19);
+  await controller.insert(id, prefix + '🙂東京\r\nか\u3099\t字\x1b\x7f\uF700');
+  await controller.stop();
+  assert.deepEqual(await configure({ copyClipboard: 'new clipboard data', consumeInput: true }), {
+    text: `left|A${prefix}🙂東京 か\u3099 字ght`, other: 'other', writes: 3, focused: 0,
+    clipboard: [{ 'public.utf8-plain-text': 'new clipboard data' }], keyUps: 3,
+  });
+});
+
+test('macOS native input stops sending text when focus changes between keyboard events', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  const { clipboard } = await configure({ switchAfterKeyPair: true });
+  const id = await start();
+  assert.ok(id);
+  const prefix = 'x'.repeat(20);
+  await assert.rejects(controller.insert(id, prefix + 'discard'), /changed or lost focus/);
+  await controller.cancel();
+  assert.deepEqual(await configure(), {
+    text: `left|${prefix}right`, other: 'other', writes: 1, focused: 1, clipboard, keyUps: 1,
+  });
 });
 
 test('macOS package launches, retains its shortcut after closing management, and releases it on Quit', {
@@ -775,14 +887,12 @@ test('native Safari receives ordered Unicode without submitting and refuses prot
   run('shortcut');
   assert.equal((await idle(app.view)).error, '');
 
-  const singleLine = await safari.focus('field', 5);
+  await safari.focus('field', 5);
   run('shortcut');
   await runningWithExternalFocus(app, run, safari.pid);
   await emit('\n');
-  await eventually(async () => safari.state().edits.length > singleLine.edits.length || (await app.view()).session.error,
-    'Safari did not handle the attempted single-line edit');
-  if ((await app.view()).session.phase === 'running') run('shortcut');
-  await idle(app.view);
+  run('shortcut');
+  assert.equal((await idle(app.view)).error, '');
   assert.equal(safari.state().submits, 0);
   assert.equal(safari.state().values.field, 'left|right');
 
@@ -797,7 +907,7 @@ test('native Safari receives ordered Unicode without submitting and refuses prot
     run('shortcut');
     await eventually(async () => {
       const { session } = await app.view();
-      return session.phase === 'idle' && /cannot be safely edited/i.test(session.error);
+      return session.phase === 'idle' && /exposes Accessibility editing/i.test(session.error);
     }, `The packaged app did not refuse ${field}`);
     const after = await eventually(() => safari.state().report > original.report && safari.state(),
       'Safari did not report its state after the refusal');

@@ -2,13 +2,10 @@
 
 My Audio to Text Desktop runs saved graphs locally from a resident menu-bar
 or tray application. macOS on Apple Silicon is the primary v1 target. The
-arm64 macOS package builds and launches. It implements dictation into system
-TextEdit and supported web text fields in the system Safari browser.
-Cross-application insertion in both remains unverified because the test
-runner lacks OS authorization.
-Stock Mousepad on Debian 12 arm64/X11 is the verified external target.
-See the [validation record](evidence/desktop-401.md#safari-native-range-replacement)
-for commands and results.
+macOS app writes to the active editor, browser field, or other editable text
+control through Accessibility editing or native keyboard input. The X11 app
+uses AT-SPI editing. Compatibility depends on the focused field and the
+editing methods it exposes.
 
 ## Build and launch
 
@@ -61,8 +58,8 @@ field when its menu opens. [Electron Linux tray behavior](https://www.electronjs
 
 1. Open **Models**, prepare Moonshine Small Streaming Japanese, and wait for
    **Ready**. Allow at least 300 MB of free disk space and 2 GB of available RAM.
-2. Place a caret in TextEdit or a supported Safari web field on macOS, or in
-   Mousepad on X11.
+2. Place the caret in the field you want to dictate into. On macOS, you can
+   also select text to replace.
 3. Press **Control+Option+Command+D** on macOS or **Ctrl+Alt+Shift+D** on X11.
    The indicator shows **Preparing** while the graph loads and **Recording**
    once microphone capture starts.
@@ -89,56 +86,39 @@ focus, identity and editability, and waits for shortcut and modifier release.
 A release from an ended voice typing or Display-only Live session is
 discarded.
 
-TextEdit uses a targeted Accessibility selected-text edit in the system
-document view. The helper confirms the edit and caret using Accessibility
-read-back.
+The macOS helper uses Accessibility selected-text editing or range replacement
+when the field exposes one of those operations. For an Accessibility-confirmed
+editable field without a direct operation, it sends Unicode text in keyboard
+events to the active application. This fallback requires macOS authorization
+to post keyboard events and leaves the clipboard untouched. It converts line
+breaks and tabs to spaces to avoid submitting forms or moving focus. Some
+applications ignore Unicode text supplied through keyboard events.
 
-In system Safari, ordinary enabled and writable AX text fields and text areas
-inside a web document can use WebKit's native range replacement. The helper
-sends the original chunk and the checked selection once. Safari applies the
-field's native editing rules, including length limits and single-line
-filtering. It may change, truncate or ignore text. The helper advances the
-queue only after observing a compatible value and caret change. If the result
-is ambiguous, it stops without retrying. Protected and read-only fields,
-browser controls such as the address bar, custom editors without the required
-Accessibility attributes, and other browsers are outside the supported scope.
+Single-line fields, multiline fields, and selections use the target's editing
+rules. A field can normalize, truncate, or ignore a chunk. Protected, disabled,
+and read-only controls are refused when identified by Accessibility. An
+application that exposes no usable editable field or returns an edit error
+will stop voice typing. Voice typing sends text without a submit command.
 
-A detected focus change stops the session and discards pending output. If
-focus changes after the final Accessibility check, Safari can apply an
-already-dispatched edit to a different field. This is a known v1 limitation.
-Stop dictation and wait for the session to finish before switching fields or
-apps. The macOS adapters leave the clipboard untouched and send no keyboard
-events for insertion.
+A detected focus change stops the session and discards pending output. An
+edit already in flight can reach a different field if focus changes after
+the final check. Stop dictation and wait for the session to finish before
+switching fields or apps.
 
-The X11 helper uses AT-SPI `Text` and `EditableText` in stock Mousepad 0.5.10
-(`sudo apt-get install mousepad`). Place a caret with no selection. AT-SPI
-does not expose custom GTK insertion handlers or their constraints. Other
-GTK text views, single-line entries, and locked text ranges are refused.
-If the target closes, changes, loses focus, or rejects output, the app stops.
+On X11, the focused control must expose AT-SPI `Text` and `EditableText`
+interfaces. Place a caret in an editable span. AT-SPI inserts at the caret
+and can apply the field's native constraints. Its insertion operation works
+at an offset, so clear any selection before starting. A browser or custom
+editor may expose text for reading without an editing interface. In the
+Debian X11 fixture, Chromium 156 exposes its tested web fields that way.
 The shortcut binds at key-down and starts or stops on key release. The tray
-checks the field captured before opening the XEmbed menu.
-
-Linux browser insertion is an optional follow-up. Chromium 156 on X11 exposes focused web
-fields through AT-SPI without `EditableText`, and the package refuses these
-fields before recording. Firefox remains deferred. The
-[insertion decision](evidence/desktop-401.md#insertion-decision) explains the
-platform tradeoffs. Wayland, Windows, mobile and system audio
-capture are outside v1.
+checks the field captured before opening the XEmbed menu. Wayland, Windows,
+mobile and system audio capture are outside v1.
 
 ## Manual test on macOS
 
-This procedure is optional. The packaged test environment was macOS 27.2.1
-(26B131), Apple Silicon arm64, Apple clang 21.0.0 and Electron 45.4.1 in
-Aqua. The [validation record](evidence/desktop-401.md#safari-native-range-replacement)
-lists the tested source and results.
-
-Before merge, clone `takahirox/my-audio-to-text`, run
-`gh pr checkout 402 --detach` inside the clone, and use
-`git rev-parse HEAD` to match the reviewed SHA on the pull request. After
-merge, check out the merge revision for #402. Follow the
-[Apple Silicon build commands](#apple-silicon-macos). Launch
-`dist/desktop/My Audio to Text.app`, or extract the archive
-`dist/my-audio-to-text-macos-arm64.tar.gz` and launch the extracted bundle.
+This procedure is optional. Build and launch the revision you want to try
+using the [Apple Silicon build commands](#apple-silicon-macos).
 
 ### Packaged app permissions
 
@@ -158,25 +138,22 @@ merge, check out the merge revision for #402. Follow the
   denial persists after moving or rebuilding the ad-hoc-signed bundle,
   remove the stale entry and add the current bundle or helper again.
 
-### Try TextEdit and Safari
+### Try an editor or browser field
 
 1. Prepare **Moonshine Small Streaming Japanese** in **Models** and wait
    for **Ready**. Select the default voice typing graph as the shortcut
-   graph. If the shortcut conflicts, choose another combination in Settings.
-2. Place the caret in a normal TextEdit document. Press
-   **Control+Option+Command+D**, wait for **Recording**, say
-   `こんにちは`, then press the same shortcut to Stop. Expect text at the
-   authorized caret with focus still in TextEdit and no duplicate chunks.
-3. Open system Safari with extensions disabled. For a local test page, enter
-   `data:text/html,<form><textarea>left%7Cright</textarea><input type=password><button>Submit</button></form>`
-   in Safari's address bar. Place the caret after `|` in the textarea.
-   Use the same shortcut, wait for **Recording**, say `こんにちは`, and
-   press the shortcut to Stop. Expect text at that caret with focus still
-   in Safari and no duplicate chunks or automatic submission. The field's
-   own editing rules apply. Move to the password field and try Start to
-   check that capture is refused.
-4. During a separate run, move focus or choose **Cancel voice typing**
-   from the menu and check that queued output is discarded.
+   graph.
+2. Open a blank document in an editor you use, or open a browser page with
+   a text field. For a local browser example, open
+   `data:text/html,<form><textarea>left%7Cright</textarea><input maxlength=6><input type=password><button>Submit</button></form>`
+   and place the caret after `|`.
+3. Press **Control+Option+Command+D**, wait for **Recording**, say
+   `こんにちは`, then press the same shortcut to Stop. Check that text
+   appears at the caret and the field stays focused. Try with selected text
+   or in the single-line field to see how the application handles replacement
+   or limits.
+4. During a separate run, move focus or choose **Cancel voice typing** from
+   the menu to check that pending text is discarded.
 
 ## Graphs and models
 
@@ -253,9 +230,10 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 The basic macOS check exercises the packaged management and Live renderers,
 native shortcut conflicts, residency after closing the window, and shortcut
 release at Quit. The suite also relaunches the package to verify Auto Save
-draft recovery. Dispatch fixtures exercise the TextEdit focus check and cover
-ordered Safari text delivery, constraints, protected fields, focus changes and
-cancellation using simulated Accessibility responses. A fixture-owned WebKit
+draft recovery. Dispatch fixtures use simulated Accessibility responses to
+exercise distinct application identities, selected-text and range editing,
+delayed keyboard input and clipboard preservation, native constraints,
+protected fields, order, focus changes, and cancellation. A fixture-owned WebKit
 window checks the installed browser engine's edit behavior, including Unicode,
 length limits and a line break in a single-line form field.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
@@ -304,11 +282,11 @@ The X11 suite starts the packaged application, Mousepad, a GTK safety fixture,
 and Chromium with a fresh profile and extensions disabled. The Mousepad tests
 check shortcut Start and Stop, exactly-once Unicode insertion at the caret,
 and safe cancellation when the target changes, including when the Stop
-shortcut is released. The GTK fixture verifies that
-length-limited buffers and protected fields retain their values and focus
-with zero edits to the constrained fields. The Chromium test checks that the
-shortcut reports a refusal while leaving the values, caret, and focus intact
-in each tested field, with zero edit events and zero form submissions. Put
+shortcut is released. The separate GTK fixture checks successful input to a
+length-limited single-line entry and multiline buffer, plus refusal of a
+password field and locked text. The Chromium 156 fixture checks refusal
+when AT-SPI editing is unavailable and confirms that field values, caret,
+focus, and form submission state are preserved. Put
 `chromium` on `PATH` or set `DESKTOP_TEST_CHROMIUM` to its executable path.
 The model smoke additionally downloads the pinned
 weights, plays a licensed speech fixture into a virtual microphone, and tests
@@ -335,5 +313,5 @@ docker run --rm --init --platform linux/arm64 --cap-add SYS_ADMIN --security-opt
 ```
 
 The container settings allow the Electron and Chromium sandboxes to run inside the VM.
-See [desktop validation evidence](evidence/desktop-401.md) for the tested
-environment, results, and fixture output.
+See the [issue #401 validation record](evidence/desktop-401.md) for historical
+environment details and fixture output.
