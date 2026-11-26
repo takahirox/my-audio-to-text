@@ -566,6 +566,29 @@ test('macOS clipboard paste', async t => {
     assert.match(state.other, /new focus/);
     assert.deepEqual(state.clipboard, originalClipboard);
   });
+
+  await t.test('skips Paste while system Accessibility focus belongs to another app', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    const id = await start();
+    await configure({ noField: true, systemField: true, systemFieldPID: 200, protected: true });
+    await controller.insert(id, 'skip during focus transition');
+    const skipped = await configure();
+    assert.equal(skipped.keyDowns, 0);
+    assert.deepEqual(skipped.clipboard, originalClipboard);
+    assert.equal(controller.current.id, id);
+    assert.equal(controller.state.phase, 'running');
+
+    await configure({ frontPid: 200, focused: 2, protected: false, noRole: true });
+    const pending = controller.insert(id, 'next eligible chunk');
+    await dispatched(1);
+    const state = await configure({ advance: 250 });
+    await pending;
+    await controller.stop();
+    assert.deepEqual(state.reads, ['next eligible chunk']);
+    assert.match(state.external, /next eligible chunk/);
+    assert.deepEqual(state.clipboard, originalClipboard);
+    assert.equal(controller.state.error, '');
+  });
 });
 
 test('macOS WebKit Paste honors native field limits and pastes a newline without submitting', async t => {

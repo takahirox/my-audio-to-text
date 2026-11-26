@@ -90,7 +90,8 @@ static pid_t foregroundPID(void) {
     return NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
 }
 
-static id focusedField(AXUIElementRef application, pid_t pid) {
+static id focusedField(AXUIElementRef application, pid_t pid, BOOL *unverifiedOwner) {
+    *unverifiedOwner = NO;
     id field = elementAttribute(application, kAXFocusedUIElementAttribute);
     if (field) return field;
 
@@ -98,10 +99,11 @@ static id focusedField(AXUIElementRef application, pid_t pid) {
     field = elementAttribute(system, kAXFocusedUIElementAttribute);
     CFRelease(system);
     pid_t owner = 0;
-    if (field && AXUIElementGetPid((__bridge AXUIElementRef)field, &owner) == kAXErrorSuccess && owner == pid) {
-        return field;
+    if (field && (AXUIElementGetPid((__bridge AXUIElementRef)field, &owner) != kAXErrorSuccess || owner != pid)) {
+        *unverifiedOwner = YES;
+        return nil;
     }
-    return nil;
+    return field;
 }
 
 static pid_t pasteTarget(void) {
@@ -112,11 +114,15 @@ static pid_t pasteTarget(void) {
         if (pid <= 0) return 0;
         AXUIElementRef application = AXUIElementCreateApplication(pid);
         AXUIElementSetMessagingTimeout(application, 0.25);
-        id field = focusedField(application, pid);
-        BOOL allowed = allowsPaste((__bridge AXUIElementRef)field);
-        id latest = focusedField(application, pid);
+        BOOL unverifiedOwner, latestUnverifiedOwner;
+        id field = focusedField(application, pid, &unverifiedOwner);
+        BOOL allowed = !unverifiedOwner && allowsPaste((__bridge AXUIElementRef)field);
+        id latest = focusedField(application, pid, &latestUnverifiedOwner);
         CFRelease(application);
-        if (foregroundPID() == pid && (field == latest || [field isEqual:latest])) return allowed ? pid : 0;
+        // An unresolved owner can indicate a focus transition. A missing
+        // field alone still permits the foreground app to handle Paste.
+        if (!unverifiedOwner && !latestUnverifiedOwner &&
+            foregroundPID() == pid && (field == latest || [field isEqual:latest])) return allowed ? pid : 0;
     }
     return 0;
 }
