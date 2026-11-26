@@ -16,33 +16,38 @@ static NSString *const clipboardChangedError = @"The clipboard changed before Pa
 static NSString *const restoreError = @"Could not restore the clipboard. Voice typing stopped.";
 static const int64_t pasteSettleTime = 250 * NSEC_PER_MSEC;
 
-static id attribute(AXUIElementRef element, CFStringRef key) {
+static id attribute(AXUIElementRef element, CFStringRef key, BOOL *queryFailed) {
+    if (!element || *queryFailed) return nil;
     CFTypeRef value = NULL;
-    if (!element || AXUIElementCopyAttributeValue(element, key, &value) != kAXErrorSuccess) return nil;
-    return CFBridgingRelease(value);
+    AXError status = AXUIElementCopyAttributeValue(element, key, &value);
+    if (status == kAXErrorSuccess) return CFBridgingRelease(value);
+    *queryFailed = status != kAXErrorAttributeUnsupported && status != kAXErrorNoValue &&
+        status != kAXErrorNotImplemented;
+    return nil;
 }
 
-static id asElement(id value) {
-    return value && CFGetTypeID((__bridge CFTypeRef)value) == AXUIElementGetTypeID() ? value : nil;
+static id elementAttribute(AXUIElementRef element, CFStringRef key, BOOL *queryFailed) {
+    id value = attribute(element, key, queryFailed);
+    if (value && CFGetTypeID((__bridge CFTypeRef)value) != AXUIElementGetTypeID()) {
+        *queryFailed = YES;
+        return nil;
+    }
+    return value;
 }
 
-static id elementAttribute(AXUIElementRef element, CFStringRef key) {
-    return asElement(attribute(element, key));
-}
-
-static BOOL allowsPaste(AXUIElementRef field) {
-    id role = attribute(field, kAXRoleAttribute);
-    id subrole = attribute(field, kAXSubroleAttribute);
-    return ![attribute(field, kAXFocusedAttribute) isEqual:@NO] &&
+static BOOL allowsPaste(AXUIElementRef field, BOOL *queryFailed) {
+    id role = attribute(field, kAXRoleAttribute, queryFailed);
+    id subrole = attribute(field, kAXSubroleAttribute, queryFailed);
+    return ![attribute(field, kAXFocusedAttribute, queryFailed) isEqual:@NO] &&
         ![role isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole] &&
         ![subrole isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole] &&
         ![role isEqual:(__bridge NSString *)kAXMenuRole] &&
         ![role isEqual:(__bridge NSString *)kAXMenuBarRole] &&
         ![role isEqual:(__bridge NSString *)kAXMenuItemRole] &&
         ![role isEqual:(__bridge NSString *)kAXMenuBarItemRole] &&
-        ![attribute(field, kAXEnabledAttribute) isEqual:@NO] &&
-        ![attribute(field, CFSTR("AXReadOnly")) isEqual:@YES] &&
-        ![attribute(field, CFSTR("AXEditable")) isEqual:@NO];
+        ![attribute(field, kAXEnabledAttribute, queryFailed) isEqual:@NO] &&
+        ![attribute(field, CFSTR("AXReadOnly"), queryFailed) isEqual:@YES] &&
+        ![attribute(field, CFSTR("AXEditable"), queryFailed) isEqual:@NO];
 }
 
 static NSString *token;
@@ -90,38 +95,49 @@ static pid_t foregroundPID(void) {
     return NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
 }
 
-static id focusedField(AXUIElementRef application, pid_t pid, BOOL *unverifiedOwner) {
+static id focusedField(AXUIElementRef application, pid_t pid, BOOL *unverifiedOwner, BOOL *queryFailed) {
     *unverifiedOwner = NO;
-    id field = elementAttribute(application, kAXFocusedUIElementAttribute);
-    if (field) return field;
+    id field = elementAttribute(application, kAXFocusedUIElementAttribute, queryFailed);
+    if (field || *queryFailed) return field;
 
     AXUIElementRef system = AXUIElementCreateSystemWide();
-    field = elementAttribute(system, kAXFocusedUIElementAttribute);
+    field = elementAttribute(system, kAXFocusedUIElementAttribute, queryFailed);
     CFRelease(system);
+    if (!field) return nil;
     pid_t owner = 0;
-    if (field && (AXUIElementGetPid((__bridge AXUIElementRef)field, &owner) != kAXErrorSuccess || owner != pid)) {
-        *unverifiedOwner = YES;
+    if (AXUIElementGetPid((__bridge AXUIElementRef)field, &owner) != kAXErrorSuccess) {
+        *queryFailed = YES;
         return nil;
     }
+    *unverifiedOwner = owner != pid;
     return field;
 }
 
 static pid_t pasteTarget(void) {
+    // A system-wide object sets the process default, including for newly
+    // returned field objects. An application timeout only covers that object.
+    AXUIElementRef system = AXUIElementCreateSystemWide();
+    AXError timeoutStatus = AXUIElementSetMessagingTimeout(system, 0.25);
+    CFRelease(system);
+    if (timeoutStatus != kAXErrorSuccess) return 0;
+
     // Inspect only the current foreground app. Refresh once if it or the
     // focused element changes during the protection checks.
     for (unsigned attempt = 0; attempt < 2; attempt++) {
         pid_t pid = foregroundPID();
         if (pid <= 0) return 0;
-        AXUIElementRef application = AXUIElementCreateApplication(pid);
-        AXUIElementSetMessagingTimeout(application, 0.25);
+        id application = CFBridgingRelease(AXUIElementCreateApplication(pid));
+        BOOL queryFailed = NO;
         BOOL unverifiedOwner, latestUnverifiedOwner;
-        id field = focusedField(application, pid, &unverifiedOwner);
-        BOOL allowed = !unverifiedOwner && allowsPaste((__bridge AXUIElementRef)field);
-        id latest = focusedField(application, pid, &latestUnverifiedOwner);
-        CFRelease(application);
-        // An unresolved owner can indicate a focus transition. A missing
-        // field alone still permits the foreground app to handle Paste.
-        if (!unverifiedOwner && !latestUnverifiedOwner &&
+        id field = focusedField((__bridge AXUIElementRef)application, pid, &unverifiedOwner, &queryFailed);
+        if (queryFailed) return 0;
+        if (unverifiedOwner) continue;
+        BOOL allowed = allowsPaste((__bridge AXUIElementRef)field, &queryFailed);
+        if (queryFailed) return 0;
+        id latest = focusedField((__bridge AXUIElementRef)application, pid, &latestUnverifiedOwner, &queryFailed);
+        if (queryFailed) return 0;
+        // Unsupported metadata still lets the foreground app handle Paste.
+        if (!latestUnverifiedOwner &&
             foregroundPID() == pid && (field == latest || [field isEqual:latest])) return allowed ? pid : 0;
     }
     return 0;

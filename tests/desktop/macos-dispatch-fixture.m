@@ -18,6 +18,8 @@ static BOOL modifiers, noField, systemField, noRole, menu;
 static BOOL failSnapshot, failStage, failRestore, copyAfterStage, pauseAfterStage;
 static BOOL switchDuringProtection, switchLayoutAfterStage;
 static pid_t switchAppAfterStage;
+static NSString *axFailure;
+static float globalAXTimeout;
 static BOOL currentHostOnly;
 static CGKeyCode layoutPasteKey = kVK_ANSI_Period;
 static dispatch_semaphore_t resumeFocus;
@@ -86,6 +88,9 @@ static void copyText(NSString *text) {
 static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTypeRef *value) {
     NSString *key = (__bridge NSString *)attribute;
     id object = (__bridge id)element;
+    if ([key isEqual:axFailure] || (object == systemElement && [axFailure isEqual:@"system focus"])) {
+        return kAXErrorCannotComplete;
+    }
     id result = nil;
     if ([key isEqual:@"AXFocusedUIElement"]) {
         if (object == systemElement ? systemField : !noField) result = fields[focused];
@@ -116,6 +121,11 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
             dispatch_time(DISPATCH_TIME_NOW, focusStallMs * NSEC_PER_MSEC + 5 * NSEC_PER_SEC)) == 0);
     }
     return result ? kAXErrorSuccess : kAXErrorAttributeUnsupported;
+}
+
+static AXError setMessagingTimeout(AXUIElementRef element, float timeout) {
+    if ((__bridge id)element == systemElement) globalAXTimeout = timeout;
+    return kAXErrorSuccess;
 }
 
 static AXError getPid(AXUIElementRef element, pid_t *pid) {
@@ -203,7 +213,7 @@ static void advanceTime(uint64_t ms) {
 #define AXUIElementCopyAttributeValue copyAttribute
 #define AXUIElementCreateSystemWide() ((__bridge_retained AXUIElementRef)systemElement)
 #define AXUIElementGetPid getPid
-#define AXUIElementSetMessagingTimeout(...) ((void)0)
+#define AXUIElementSetMessagingTimeout setMessagingTimeout
 #define IsSecureEventInputEnabled() (secureInput)
 #define CGPreflightPostEventAccess() (canPost)
 #define GetCurrentKeyModifiers() (modifiers ? cmdKey : 0)
@@ -231,7 +241,7 @@ static NSDictionary *fixtureState(void) {
     }
     return @{@"text": editors[0].string, @"other": editors[1].string, @"external": editors[2].string, @"reads": reads,
              @"keyDowns": @(keyDowns), @"keyUps": @(keyUps), @"keyCodes": keyCodes, @"clipboard": items,
-             @"currentHostOnly": @(currentHostOnly)};
+             @"currentHostOnly": @(currentHostOnly), @"globalAXTimeout": @(globalAXTimeout)};
 }
 
 static void reportQuit(void) {
@@ -262,6 +272,7 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"systemFieldPID"]) systemFieldPID = [options[@"systemFieldPID"] intValue];
     if (options[@"menu"]) menu = [options[@"menu"] boolValue];
     if (options[@"noRole"]) noRole = [options[@"noRole"] boolValue];
+    if (options[@"axFailure"]) axFailure = options[@"axFailure"];
     if (options[@"editorEditable"]) editors[0].editable = [options[@"editorEditable"] boolValue];
     if (options[@"failSnapshot"]) failSnapshot = [options[@"failSnapshot"] boolValue];
     if (options[@"failStage"]) failStage = [options[@"failStage"] boolValue];

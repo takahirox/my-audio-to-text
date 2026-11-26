@@ -505,6 +505,35 @@ test('macOS clipboard paste', async t => {
     assert.equal(state.text, 'lefteligibleright');
   });
 
+  await t.test('skips chunks when Accessibility focus or protection queries time out', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    const id = await start();
+    for (const axFailure of ['AXSubrole', 'AXFocusedUIElement', 'system focus']) {
+      await configure({ axFailure, noField: axFailure === 'system focus' });
+      const pending = controller.insert(id, 'skip');
+      // Let the session queue send the insert before advancing the fixture clock.
+      await Promise.resolve();
+      await configure({ advance: 250 });
+      await pending;
+      const state = await configure();
+      assert.equal(state.keyDowns, 0);
+      assert.equal(state.globalAXTimeout, 0.25);
+      assert.deepEqual(state.clipboard, originalClipboard);
+      assert.equal(controller.current.id, id);
+      assert.equal(controller.state.phase, 'running');
+    }
+
+    await configure({ axFailure: '', noField: false, noRole: true });
+    const pending = controller.insert(id, 'next chunk');
+    await dispatched(1);
+    const state = await configure({ advance: 250 });
+    await pending;
+    await controller.stop();
+    assert.deepEqual(state.reads, ['next chunk']);
+    assert.deepEqual(state.clipboard, originalClipboard);
+    assert.equal(controller.state.error, '');
+  });
+
   await t.test('permission failures still prevent Start or stop delivery', async t => {
     for (const [option, error] of [['canPost', /post keyboard events/], ['trusted', /Accessibility/]]) {
       const { controller, configure, start } = dispatchFixture(t, tool);

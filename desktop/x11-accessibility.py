@@ -192,19 +192,21 @@ class Focus:
         self.verify(window, frame, node)
         length = len(text.encode("utf-8"))
         self.require_authorization(token)
-        self.unadvanced_carets.pop(node, None)
-        if node.insert_text(offset, text, length):
-            # Until advancement is confirmed, skip later chunks at this
-            # offset so they cannot land ahead of the text just inserted.
-            self.unadvanced_carets[node] = offset
-            inserted = node.get_character_count() - before
-            if inserted <= 0 or node.get_caret_offset() != offset:
+        # A lost reply can leave an applied edit at the original caret.
+        # Guard that offset before dispatching so later chunks cannot overtake it.
+        self.unadvanced_carets[node] = offset
+        if not node.insert_text(offset, text, length):
+            del self.unadvanced_carets[node]
+            return True
+
+        inserted = node.get_character_count() - before
+        if inserted <= 0 or node.get_caret_offset() != offset:
+            del self.unadvanced_carets[node]
+        elif not node.get_n_selections():
+            self.verify(window, frame, node)
+            self.require_authorization(token)
+            if node.set_caret_offset(offset + inserted):
                 del self.unadvanced_carets[node]
-            elif not node.get_n_selections():
-                self.verify(window, frame, node)
-                self.require_authorization(token)
-                if node.set_caret_offset(offset + inserted):
-                    del self.unadvanced_carets[node]
         return True
 
     def x_event(self, *_args):
