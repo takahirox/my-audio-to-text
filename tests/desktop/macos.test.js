@@ -395,13 +395,9 @@ test('macOS range replacement discards cancelled deliveries and accepts a native
 
 test('macOS selected-text queue drains ordered commits and stops on a reported failure', async t => {
   const { controller, configure, start, waiting } = await dispatchFixture(t, 'selected text');
-  for (const [options, error] of [
-    [{ denyAccessibility: true }, /Accessibility/], [{ readOnly: true }, /exposes Accessibility editing/],
-  ]) {
-    await configure(options);
-    assert.equal(await start(), undefined);
-    assert.match(controller.state.error, error);
-  }
+  await configure({ denyAccessibility: true });
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /Accessibility/);
 
   await configure();
   let id = await start();
@@ -429,6 +425,22 @@ test('macOS selected-text queue drains ordered commits and stops on a reported f
   ]);
   await controller.cancel();
   assert.deepEqual(await configure(), { ...inserted, writes: 4 });
+});
+
+test('macOS rejects settable selected text in a read-only field at bind and dispatch', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'selected text');
+  const field = { singleLine: true, selectionLength: 2 };
+  await configure({ ...field, readOnly: true });
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /exposes Accessibility editing/);
+
+  await configure(field);
+  const id = await start();
+  assert.ok(id);
+  await configure({ ...field, readOnlyOnFinalEditability: true });
+  await assert.rejects(controller.insert(id, 'never dispatch'), /exposes Accessibility editing/);
+  await controller.cancel();
+  assert.deepEqual(await configure(), { text: 'left|right', other: 'other', writes: 0, focused: 0 });
 });
 
 test('macOS equivalent editable fields accept the same selected-text edit in unrelated apps', async t => {

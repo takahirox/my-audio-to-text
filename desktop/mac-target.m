@@ -63,20 +63,20 @@ static EditMethod editMethod(AXUIElementRef field, AXUIElementRef window) {
     id owner = elementAttribute(field, kAXWindowAttribute);
     if (owner && !CFEqual((__bridge CFTypeRef)owner, window)) return Unavailable;
 
-    BOOL canEditValue = writable(field, kAXValueAttribute) || [editable isEqual:@YES];
-    if (canEditValue) {
-        CFArrayRef parameterized = NULL;
-        if (AXUIElementCopyParameterizedAttributeNames(field, &parameterized) == kAXErrorSuccess) {
-            NSArray *names = CFBridgingRelease(parameterized);
-            CFRange selection;
-            if ([names containsObject:(__bridge NSString *)replaceRange] &&
-                [attribute(field, kAXValueAttribute) isKindOfClass:NSString.class] && readSelection(field, &selection)) {
-                return RangeReplacement;
-            }
+    // Some read-only fields still report AXSelectedText as settable.
+    if (!writable(field, kAXValueAttribute) && ![editable isEqual:@YES]) return Unavailable;
+
+    CFArrayRef parameterized = NULL;
+    if (AXUIElementCopyParameterizedAttributeNames(field, &parameterized) == kAXErrorSuccess) {
+        NSArray *names = CFBridgingRelease(parameterized);
+        CFRange selection;
+        if ([names containsObject:(__bridge NSString *)replaceRange] &&
+            [attribute(field, kAXValueAttribute) isKindOfClass:NSString.class] && readSelection(field, &selection)) {
+            return RangeReplacement;
         }
     }
     if (writable(field, kAXSelectedTextAttribute)) return SelectedText;
-    return canEditValue ? NativeInput : Unavailable;
+    return NativeInput;
 }
 
 @interface Binding : NSObject
