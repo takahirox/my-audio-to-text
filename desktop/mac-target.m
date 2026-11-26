@@ -5,17 +5,20 @@
 
 static NSString *const permissionError =
     @"Allow My Audio to Text in System Settings → Privacy & Security → Device Control and Data Access (Accessibility), then start again.";
-static NSString *const targetError =
-    @"Focus an editable text field that exposes Accessibility editing and try again.";
+static NSString *const targetError = @"Focus the app where you want to type and start again.";
 static NSString *const focusError = @"The authorized window or text field changed or lost focus.";
+static NSString *const protectedFieldError = @"The focused field is protected. Focus a different field and start again.";
+static NSString *const disabledFieldError = @"The focused field is disabled. Focus an editable field and start again.";
+static NSString *const readOnlyFieldError = @"The focused field is read-only. Focus an editable field and start again.";
+static NSString *const secureInputError = @"macOS Secure Keyboard Entry is active. Focus a field that accepts ordinary input and start again.";
 static NSString *const selectionError = @"The text or selection changed before the edit. Voice typing stopped.";
 static NSString *const writeError = @"The focused field rejected the Accessibility edit. Voice typing stopped.";
 static NSString *const keyboardPermissionError =
-    @"Allow My Audio to Text to post keyboard events under Accessibility in System Settings → Privacy & Security, then start again.";
+    @"Allow My Audio to Text to post keyboard events under Device Control and Data Access (Accessibility) in System Settings → Privacy & Security, then start again.";
 static NSString *const keyboardError = @"Could not send text to the focused field. Voice typing stopped.";
 static CFStringRef const replaceRange = CFSTR("AXReplaceRangeWithText");
 
-typedef NS_ENUM(NSInteger, EditMethod) { Unavailable, SelectedText, RangeReplacement, NativeInput };
+typedef NS_ENUM(NSInteger, EditMethod) { SelectedText, RangeReplacement, NativeInput };
 
 static id attribute(AXUIElementRef element, CFStringRef key) {
     CFTypeRef value = NULL;
@@ -23,9 +26,12 @@ static id attribute(AXUIElementRef element, CFStringRef key) {
     return CFBridgingRelease(value);
 }
 
-static id elementAttribute(AXUIElementRef element, CFStringRef key) {
-    id value = attribute(element, key);
+static id asElement(id value) {
     return value && CFGetTypeID((__bridge CFTypeRef)value) == AXUIElementGetTypeID() ? value : nil;
+}
+
+static id elementAttribute(AXUIElementRef element, CFStringRef key) {
+    return asElement(attribute(element, key));
 }
 
 static BOOL writable(AXUIElementRef element, CFStringRef key) {
@@ -39,47 +45,44 @@ static BOOL readSelection(AXUIElementRef element, CFRange *range) {
         AXValueGetValue((__bridge AXValueRef)selection, kAXValueTypeCFRange, range);
 }
 
-static BOOL hasSameTextAndSelection(AXUIElementRef element, NSString *value, CFRange range) {
-    CFRange currentSelection;
-    return [attribute(element, kAXValueAttribute) isEqual:value] &&
-        readSelection(element, &currentSelection) &&
-        currentSelection.location == range.location && currentSelection.length == range.length;
+static BOOL validRange(NSString *value, CFRange range) {
+    return range.location >= 0 && range.length >= 0 && (NSUInteger)range.location <= value.length &&
+        (NSUInteger)range.length <= value.length - (NSUInteger)range.location;
 }
 
-static EditMethod editMethod(AXUIElementRef field, AXUIElementRef window) {
-    if (!field || !window) return Unavailable;
+static NSString *fieldError(AXUIElementRef field) {
+    if ([attribute(field, kAXFocusedAttribute) isEqual:@NO]) return focusError;
     id role = attribute(field, kAXRoleAttribute);
-    BOOL comboBox = [role isEqual:@"AXComboBox"];
-    if (!comboBox && ![role isEqual:@"AXTextArea"] && ![role isEqual:@"AXTextField"]) return Unavailable;
-    CFTypeRef subrole = NULL;
-    AXError status = AXUIElementCopyAttributeValue(field, kAXSubroleAttribute, &subrole);
-    id fieldSubrole = CFBridgingRelease(subrole);
-    if ((status != kAXErrorSuccess && status != kAXErrorNoValue && status != kAXErrorAttributeUnsupported) ||
-        [fieldSubrole isEqual:@"AXSecureTextField"] ||
-        [attribute(field, kAXEnabledAttribute) isEqual:@NO] ||
-        [attribute(field, kAXFocusedAttribute) isEqual:@NO] ||
-        [attribute(field, CFSTR("AXReadOnly")) isEqual:@YES]) return Unavailable;
-    id editable = attribute(field, CFSTR("AXEditable"));
-    if ([editable isEqual:@NO]) return Unavailable;
-    id owner = elementAttribute(field, kAXWindowAttribute);
-    if (owner && !CFEqual((__bridge CFTypeRef)owner, window)) return Unavailable;
+    id subrole = attribute(field, kAXSubroleAttribute);
+    if ([role isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole] ||
+        [subrole isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole]) return protectedFieldError;
+    if ([attribute(field, kAXEnabledAttribute) isEqual:@NO]) return disabledFieldError;
+    if ([attribute(field, CFSTR("AXReadOnly")) isEqual:@YES] ||
+        [attribute(field, CFSTR("AXEditable")) isEqual:@NO]) return readOnlyFieldError;
+    return nil;
+}
 
-    // Some read-only fields still report AXSelectedText as settable.
-    if (!writable(field, kAXValueAttribute) && ![editable isEqual:@YES]) return Unavailable;
+static EditMethod editMethod(AXUIElementRef field) {
+    id role = attribute(field, kAXRoleAttribute);
+    if (![role isEqual:@"AXTextArea"] && ![role isEqual:@"AXTextField"] && ![role isEqual:@"AXComboBox"]) return NativeInput;
+
+    // AXSelectedText can be settable even in a read-only field. Require
+    // stronger evidence for direct mutation and let the native editor decide
+    // whether to consume keyboard input when that evidence is missing.
+    if (!writable(field, kAXValueAttribute) && ![attribute(field, CFSTR("AXEditable")) isEqual:@YES]) return NativeInput;
 
     CFArrayRef parameterized = NULL;
     if (AXUIElementCopyParameterizedAttributeNames(field, &parameterized) == kAXErrorSuccess) {
         NSArray *names = CFBridgingRelease(parameterized);
-        CFRange selection;
-        if ([names containsObject:(__bridge NSString *)replaceRange] &&
-            [attribute(field, kAXValueAttribute) isKindOfClass:NSString.class] && readSelection(field, &selection)) {
-            return RangeReplacement;
+        if ([names containsObject:(__bridge NSString *)replaceRange]) {
+            id value = attribute(field, kAXValueAttribute);
+            CFRange selection;
+            if ([value isKindOfClass:NSString.class] && readSelection(field, &selection) && validRange(value, selection)) {
+                return RangeReplacement;
+            }
         }
     }
     if (writable(field, kAXSelectedTextAttribute)) return SelectedText;
-    // A selection-only combo box can expose a writable value. A settable text
-    // range also indicates text editing when the provider omits AXEditable.
-    if (comboBox && ![editable isEqual:@YES] && !writable(field, kAXSelectedTextRangeAttribute)) return Unavailable;
     return NativeInput;
 }
 
@@ -165,6 +168,48 @@ static void focusedChanged(AXObserverRef observer, AXUIElementRef element, CFStr
     invalidate(binding, focusError);
 }
 
+static BOOL hasBoundFocus(Binding *binding) {
+    NSWorkspace *workspace = NSWorkspace.sharedWorkspace;
+    if (workspace.frontmostApplication.processIdentifier != binding.pid) return NO;
+
+    AXUIElementRef application = (__bridge AXUIElementRef)binding.application;
+    NSArray *keys = @[(__bridge NSString *)kAXFocusedWindowAttribute, (__bridge NSString *)kAXFocusedUIElementAttribute];
+    CFArrayRef values = NULL;
+    id window = nil, area = nil;
+    // A provider can return one focus attribute and an error for the other.
+    if (AXUIElementCopyMultipleAttributeValues(application, (__bridge CFArrayRef)keys, 0, &values) == kAXErrorSuccess) {
+        NSArray *focus = CFBridgingRelease(values);
+        if (focus.count == keys.count) {
+            window = asElement(focus[0]);
+            area = asElement(focus[1]);
+        }
+    } else {
+        window = elementAttribute(application, kAXFocusedWindowAttribute);
+        area = elementAttribute(application, kAXFocusedUIElementAttribute);
+    }
+    if (!area) {
+        AXUIElementRef system = AXUIElementCreateSystemWide();
+        id focused = elementAttribute(system, kAXFocusedUIElementAttribute);
+        CFRelease(system);
+        pid_t pid = 0;
+        if (focused && AXUIElementGetPid((__bridge AXUIElementRef)focused, &pid) == kAXErrorSuccess) {
+            if (pid != binding.pid) return NO;
+            area = focused;
+        }
+    }
+    id owner = elementAttribute((__bridge AXUIElementRef)area, kAXWindowAttribute);
+    if (window && owner && ![window isEqual:owner]) return NO;
+    window = window ?: owner;
+
+    // An initially unknown identity may become observable. Once bound to an
+    // identity, require it to still match before sending more text.
+    if ((binding.window && ![binding.window isEqual:window]) || (binding.area && ![binding.area isEqual:area]) ||
+        workspace.frontmostApplication.processIdentifier != binding.pid) return NO;
+    if (!binding.window) binding.window = window;
+    if (!binding.area) binding.area = area;
+    return YES;
+}
+
 static Binding *captureTarget(void) {
     Binding *result = [Binding new];
     if (!AXIsProcessTrusted()) {
@@ -180,10 +225,8 @@ static Binding *captureTarget(void) {
     AXUIElementRef application = AXUIElementCreateApplication(pid);
     result.application = CFBridgingRelease(application);
     AXUIElementSetMessagingTimeout(application, 0.25);
-    result.window = elementAttribute(application, kAXFocusedWindowAttribute);
-    result.area = elementAttribute(application, kAXFocusedUIElementAttribute);
-    if (!result.window || !result.area) {
-        result.failed = targetError;
+    if (!hasBoundFocus(result)) {
+        result.failed = focusError;
         return result;
     }
 
@@ -194,32 +237,27 @@ static Binding *captureTarget(void) {
         result.observer = observer;
         AXObserverAddNotification(observer, application, kAXFocusedUIElementChangedNotification, (__bridge void *)result);
         AXObserverAddNotification(observer, application, kAXFocusedWindowChangedNotification, (__bridge void *)result);
-        AXObserverAddNotification(observer, (__bridge AXUIElementRef)result.window, kAXUIElementDestroyedNotification,
-                                  (__bridge void *)result);
+        if (result.window) {
+            AXObserverAddNotification(observer, (__bridge AXUIElementRef)result.window, kAXUIElementDestroyedNotification,
+                                      (__bridge void *)result);
+        }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), kCFRunLoopCommonModes);
     }
     return result;
 }
 
-static BOOL hasBoundFocus(Binding *binding) {
-    AXUIElementRef application = (__bridge AXUIElementRef)binding.application;
-    NSArray *keys = @[(__bridge NSString *)kAXFocusedWindowAttribute, (__bridge NSString *)kAXFocusedUIElementAttribute];
-    CFArrayRef values = NULL;
-    if (AXUIElementCopyMultipleAttributeValues(application, (__bridge CFArrayRef)keys,
-            kAXCopyMultipleAttributeOptionStopOnError, &values) != kAXErrorSuccess) return NO;
-    NSArray *focus = CFBridgingRelease(values);
-    return focus.count == 2 &&
-        CFEqual((__bridge CFTypeRef)focus[0], (__bridge CFTypeRef)binding.window) &&
-        CFEqual((__bridge CFTypeRef)focus[1], (__bridge CFTypeRef)binding.area) &&
-        NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == binding.pid;
-}
-
-static NSString *check(Binding *binding, EditMethod *method) {
+static NSString *checkTarget(Binding *binding) {
     if (binding.failed) return binding.failed;
     if (!AXIsProcessTrusted()) return permissionError;
     if (!hasBoundFocus(binding)) return focusError;
-    EditMethod available = editMethod((__bridge AXUIElementRef)binding.area, (__bridge AXUIElementRef)binding.window);
-    if (available == Unavailable) return targetError;
+    if (IsSecureEventInputEnabled()) return secureInputError;
+    return fieldError((__bridge AXUIElementRef)binding.area);
+}
+
+static NSString *check(Binding *binding, EditMethod *method) {
+    NSString *error = checkTarget(binding);
+    if (error) return error;
+    EditMethod available = editMethod((__bridge AXUIElementRef)binding.area);
     if (available == NativeInput && !CGPreflightPostEventAccess()) return keyboardPermissionError;
     if (method) *method = available;
     return nil;
@@ -241,11 +279,19 @@ static BOOL releaseRequested(void) {
     }
 }
 
-static NSString *dispatchError(Binding *binding) {
+static NSString *checkDispatchFocus(Binding *binding) {
+    id checkedArea = binding.area;
+    // Focus can move within the same application during the preceding AX lookups.
     if (!hasBoundFocus(binding)) return focusError;
+    if (!checkedArea && binding.area) {
+        NSString *error = fieldError((__bridge AXUIElementRef)binding.area);
+        if (error) return error;
+        if (!hasBoundFocus(binding)) return focusError;
+    }
     if (!AXIsProcessTrusted()) return permissionError;
-    if (releaseRequested()) return focusError;
-    return nil;
+    if (IsSecureEventInputEnabled()) return secureInputError;
+    if (releaseRequested() || NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != binding.pid) return focusError;
+    return binding.failed;
 }
 
 static NSString *keyboardText(NSString *text) {
@@ -298,7 +344,8 @@ static void postText(Binding *binding) {
     CGEventSetFlags(up, 0);
     CGEventKeyboardSetUnicodeString(down, length, buffer);
     CGEventKeyboardSetUnicodeString(up, length, buffer);
-    NSString *error = CGPreflightPostEventAccess() ? dispatchError(binding) : keyboardPermissionError;
+    NSString *error = checkTarget(binding) ?: checkDispatchFocus(binding);
+    if (!error && !CGPreflightPostEventAccess()) error = keyboardPermissionError;
     BOOL modifiersHeld = shortcutHeld();
     if (!error && !modifiersHeld) {
         CGEventPostToPid(binding.pid, down);
@@ -330,6 +377,11 @@ static void insertWhenReleased(void) {
     }
     if (now < writeAfter) return;
     Binding *binding = bound;
+    // Keep sending an already-started keyboard delivery with the same method.
+    if (nativeInputOffset) {
+        postText(binding);
+        return;
+    }
     EditMethod method;
     NSString *error = check(binding, &method);
     if (error) {
@@ -340,21 +392,14 @@ static void insertWhenReleased(void) {
         postText(binding);
         return;
     }
-    if (nativeInputOffset) {
-        finishWrite(targetError);
-        return;
-    }
-
     AXUIElementRef area = (__bridge AXUIElementRef)binding.area;
     NSDictionary *replacement = nil;
     NSString *value = nil;
     CFRange range;
     if (method == RangeReplacement) {
         value = attribute(area, kAXValueAttribute);
-        if (![value isKindOfClass:NSString.class] || !readSelection(area, &range) ||
-            range.location < 0 || range.length < 0 || (NSUInteger)range.location > value.length ||
-            (NSUInteger)range.length > value.length - (NSUInteger)range.location) {
-            finishWrite(selectionError);
+        if (![value isKindOfClass:NSString.class] || !readSelection(area, &range) || !validRange(value, range)) {
+            postText(binding);
             return;
         }
         id rangeValue = CFBridgingRelease(AXValueCreate(kAXValueTypeCFRange, &range));
@@ -367,16 +412,33 @@ static void insertWhenReleased(void) {
 
     EditMethod current;
     error = check(binding, &current);
-    if (error || current != method) {
-        finishWrite(error ?: targetError);
+    if (error) {
+        finishWrite(error);
         return;
     }
-    // Explicit ranges remain valid only while the value and selection match.
-    if (replacement && !hasSameTextAndSelection(area, value, range)) {
-        finishWrite(selectionError);
+    if (current != method) {
+        postText(binding);
         return;
     }
-    error = dispatchError(binding);
+    error = checkTarget(binding);
+    if (error) {
+        finishWrite(error);
+        return;
+    }
+    // Revalidate explicit ranges after the dispatch-time protection lookups.
+    if (replacement) {
+        id currentValue = attribute(area, kAXValueAttribute);
+        CFRange currentSelection;
+        if (![currentValue isKindOfClass:NSString.class] || !readSelection(area, &currentSelection)) {
+            postText(binding);
+            return;
+        }
+        if (![currentValue isEqual:value] || currentSelection.location != range.location || currentSelection.length != range.length) {
+            finishWrite(selectionError);
+            return;
+        }
+    }
+    error = checkDispatchFocus(binding);
     if (error) {
         finishWrite(error);
         return;
