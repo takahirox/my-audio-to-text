@@ -1,7 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Carbon/Carbon.h>
-#import <signal.h>
 #import <stdio.h>
 
 static NSString *const permissionError =
@@ -11,13 +10,12 @@ static NSString *const targetError =
 static NSString *const focusError = @"The authorized window or text field changed or lost focus.";
 static NSString *const selectionError = @"The text or selection changed before the edit. Voice typing stopped.";
 static NSString *const writeError = @"The focused field rejected the Accessibility edit. Voice typing stopped.";
-static NSString *const pastePermissionError =
+static NSString *const keyboardPermissionError =
     @"Allow My Audio to Text to post keyboard events under Accessibility in System Settings → Privacy & Security, then start again.";
-static NSString *const pasteboardError =
-    @"The clipboard changed or could not be preserved for native paste. Voice typing stopped.";
+static NSString *const keyboardError = @"Could not send text to the focused field. Voice typing stopped.";
 static CFStringRef const replaceRange = CFSTR("AXReplaceRangeWithText");
 
-typedef NS_ENUM(NSInteger, EditMethod) { Unavailable, SelectedText, RangeReplacement, NativePaste };
+typedef NS_ENUM(NSInteger, EditMethod) { Unavailable, SelectedText, RangeReplacement, NativeInput };
 
 static id attribute(AXUIElementRef element, CFStringRef key) {
     CFTypeRef value = NULL;
@@ -78,7 +76,7 @@ static EditMethod editMethod(AXUIElementRef field, AXUIElementRef window) {
         }
     }
     if (writable(field, kAXSelectedTextAttribute)) return SelectedText;
-    return canEditValue ? NativePaste : Unavailable;
+    return canEditValue ? NativeInput : Unavailable;
 }
 
 @interface Binding : NSObject
@@ -116,14 +114,13 @@ static NSNumber *heldContext;
 static BOOL waitingForRelease;
 static NSString *pendingText;
 static NSNumber *pendingRequest;
+static NSUInteger nativeInputOffset;
 static CFAbsoluteTime writeAfter;
 static CFAbsoluteTime nextWaitingNotice;
 // The stdin reader publishes revocations while the main queue is in AX calls.
 // Synchronize only this state so the reader never has to wait for an AX call.
 static NSMutableSet<NSString *> *releaseRequests;
 static BOOL inputClosed;
-static BOOL exiting;
-static BOOL pasteInFlight;
 
 static void emitMessage(NSDictionary *message) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:message options:0 error:NULL];
@@ -141,6 +138,7 @@ static void finishWrite(NSString *error) {
     NSNumber *request = pendingRequest;
     pendingRequest = nil;
     pendingText = nil;
+    nativeInputOffset = 0;
     waitingForRelease = NO;
     if (request) respond(request, error);
 }
@@ -218,7 +216,7 @@ static NSString *check(Binding *binding, EditMethod *method) {
     if (!hasBoundFocus(binding)) return focusError;
     EditMethod available = editMethod((__bridge AXUIElementRef)binding.area, (__bridge AXUIElementRef)binding.window);
     if (available == Unavailable) return targetError;
-    if (available == NativePaste && !CGPreflightPostEventAccess()) return pastePermissionError;
+    if (available == NativeInput && !CGPreflightPostEventAccess()) return keyboardPermissionError;
     if (method) *method = available;
     return nil;
 }
@@ -227,124 +225,103 @@ static BOOL shortcutHeld(void) {
     return held || (GetCurrentKeyModifiers() & (cmdKey | shiftKey | optionKey | controlKey));
 }
 
+static void notifyWriteWaiting(CFAbsoluteTime now) {
+    if (now < nextWaitingNotice) return;
+    emitMessage(@{@"request": pendingRequest, @"waiting": @YES});
+    nextWaitingNotice = now + 1;
+}
+
 static BOOL releaseRequested(void) {
     @synchronized (releaseRequests) {
         return inputClosed || (token && [releaseRequests containsObject:token]);
     }
 }
 
-static NSArray<NSPasteboardItem *> *copyPasteboardItems(NSPasteboard *pasteboard) {
-    if (@available(macOS 15.4, *)) {
-        if (pasteboard.accessBehavior == NSPasteboardAccessBehaviorAlwaysDeny) return nil;
-    }
-    NSMutableArray<NSPasteboardItem *> *copies = [NSMutableArray array];
-    NSArray<NSPasteboardItem *> *items = pasteboard.pasteboardItems;
-    if (!items && pasteboard.types.count) return nil;
-    for (NSPasteboardItem *item in items) {
-        NSPasteboardItem *copy = [NSPasteboardItem new];
-        for (NSPasteboardType type in item.types) {
-            // A file promise needs its original provider when pasted.
-            if ([type isEqual:(__bridge NSString *)kPasteboardTypeFileURLPromise]) return nil;
-            NSData *data = [item dataForType:type];
-            if (!data || ![copy setData:data forType:type]) return nil;
-        }
-        if (!copy.types.count) return nil;
-        [copies addObject:copy];
-    }
-    return copies;
-}
-
-static BOOL restorePasteboard(NSPasteboard *pasteboard, NSInteger generation, NSArray<NSPasteboardItem *> *items) {
-    if (pasteboard.changeCount != generation) return NO;
-    [pasteboard clearContents];
-    return !items.count || [pasteboard writeObjects:items];
-}
-
-static void requestExit(void) {
-    exiting = YES;
-    if (!pasteInFlight) exit(0);
-}
-
 static NSString *dispatchError(Binding *binding) {
     if (!hasBoundFocus(binding)) return focusError;
     if (!AXIsProcessTrusted()) return permissionError;
-    if (releaseRequested() || exiting) return focusError;
+    if (releaseRequested()) return focusError;
     return nil;
 }
 
-static void pasteText(Binding *binding, NSNumber *request, NSString *text) {
-    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
-    NSInteger originalGeneration = pasteboard.changeCount;
-    NSArray<NSPasteboardItem *> *original = copyPasteboardItems(pasteboard);
-    CGEventRef down = CGEventCreateKeyboardEvent(NULL, kVK_ANSI_V, true);
-    CGEventRef up = CGEventCreateKeyboardEvent(NULL, kVK_ANSI_V, false);
-    if (!original || !down || !up) {
+static NSString *keyboardText(NSString *text) {
+    // AppKit can interpret control characters as editing or navigation
+    // commands even in a Unicode payload. In this fallback, use spaces for
+    // breaks and tabs, and drop remaining key-command characters.
+    NSMutableCharacterSet *breaks = [NSCharacterSet.newlineCharacterSet mutableCopy];
+    [breaks addCharactersInString:@"\t"];
+    NSString *singleBreaks = [text stringByReplacingOccurrencesOfString:@"\r\n" withString:@"\n"];
+    NSString *plain = [[singleBreaks componentsSeparatedByCharactersInSet:breaks] componentsJoinedByString:@" "];
+    NSMutableCharacterSet *commands = [NSMutableCharacterSet characterSetWithRange:NSMakeRange(0, 0x20)];
+    [commands addCharactersInRange:NSMakeRange(0x7F, 0x21)];
+    [commands addCharactersInRange:NSMakeRange(NSUpArrowFunctionKey, NSModeSwitchFunctionKey - NSUpArrowFunctionKey + 1)];
+    return [[plain componentsSeparatedByCharactersInSet:commands] componentsJoinedByString:@""];
+}
+
+static void insertWhenReleased(void);
+
+static void postText(Binding *binding) {
+    NSString *text = nativeInputOffset ? pendingText : keyboardText(pendingText);
+    if (!text.length) {
+        finishWrite(nil);
+        return;
+    }
+    // Quartz keyboard events carry up to 20 UTF-16 code units. Keep
+    // composed sequences together when they fit and never split a surrogate pair.
+    enum { maxCodeUnits = 20 };
+    UniChar buffer[maxCodeUnits];
+    NSUInteger end = MIN(nativeInputOffset + maxCodeUnits, text.length);
+    if (end < text.length) {
+        NSRange sequence = [text rangeOfComposedCharacterSequenceAtIndex:end];
+        if (sequence.location > nativeInputOffset) end = sequence.location;
+        else if (CFStringIsSurrogateHighCharacter([text characterAtIndex:end - 1])) end--;
+    }
+    NSUInteger length = end - nativeInputOffset;
+    [text getCharacters:buffer range:NSMakeRange(nativeInputOffset, length)];
+
+    // An unmapped virtual key carries only text for clients that honor the
+    // Unicode payload. No event asks the target to read the shared clipboard.
+    const CGKeyCode unicodeKey = 0xFF;
+    CGEventRef down = CGEventCreateKeyboardEvent(NULL, unicodeKey, true);
+    CGEventRef up = CGEventCreateKeyboardEvent(NULL, unicodeKey, false);
+    if (!down || !up) {
         if (down) CFRelease(down);
         if (up) CFRelease(up);
-        finishWrite(original ? writeError : pasteboardError);
+        finishWrite(keyboardError);
         return;
     }
-    CGEventSetFlags(down, kCGEventFlagMaskCommand);
-    CGEventSetFlags(up, kCGEventFlagMaskCommand);
-    EditMethod method;
-    NSString *error = check(binding, &method);
-    if (!error && method != NativePaste) error = targetError;
-    if (!error) error = dispatchError(binding);
-    if (!error && shortcutHeld()) {
-        CFRelease(down);
-        CFRelease(up);
-        writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
-        return;
+    CGEventSetFlags(down, 0);
+    CGEventSetFlags(up, 0);
+    CGEventKeyboardSetUnicodeString(down, length, buffer);
+    CGEventKeyboardSetUnicodeString(up, length, buffer);
+    NSString *error = CGPreflightPostEventAccess() ? dispatchError(binding) : keyboardPermissionError;
+    BOOL modifiersHeld = shortcutHeld();
+    if (!error && !modifiersHeld) {
+        CGEventPostToPid(binding.pid, down);
+        CGEventPostToPid(binding.pid, up);
     }
-    if (!error && pasteboard.changeCount != originalGeneration) error = pasteboardError;
-    if (error) {
-        CFRelease(down);
-        CFRelease(up);
-        finishWrite(error);
-        return;
-    }
-
-    NSInteger generation = [pasteboard clearContents];
-    if (![pasteboard setString:text forType:NSPasteboardTypeString]) error = pasteboardError;
-    else if (!CGPreflightPostEventAccess()) error = pastePermissionError;
-    else error = dispatchError(binding);
-    if (!error && pasteboard.changeCount != generation) error = pasteboardError;
-    if (error || shortcutHeld()) {
-        BOOL restored = restorePasteboard(pasteboard, generation, original);
-        CFRelease(down);
-        CFRelease(up);
-        if (error || !restored) finishWrite(error ?: pasteboardError);
-        else writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
-        return;
-    }
-    waitingForRelease = NO;
-    pasteInFlight = YES;
-    CGEventPostToPid(binding.pid, down);
-    CGEventPostToPid(binding.pid, up);
     CFRelease(down);
     CFRelease(up);
-
-    // The receiving app reads the clipboard asynchronously. Keep writes
-    // serialized until it has had time to read, even if this session ends.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-        BOOL restored = restorePasteboard(pasteboard, generation, original);
-        pasteInFlight = NO;
-        if (exiting) exit(0);
-        if ([request isEqual:pendingRequest]) {
-            finishWrite(dispatchError(binding) ?: (restored ? nil : pasteboardError));
-        }
-    });
+    if (error) finishWrite(error);
+    else if (modifiersHeld) writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
+    else if (end == text.length) finishWrite(nil);
+    else {
+        pendingText = text;
+        nativeInputOffset = end;
+        notifyWriteWaiting(CFAbsoluteTimeGetCurrent());
+        NSNumber *request = pendingRequest;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([request isEqual:pendingRequest]) insertWhenReleased();
+        });
+    }
 }
 
 static void insertWhenReleased(void) {
-    if (!waitingForRelease || pasteInFlight) return;
+    if (!waitingForRelease) return;
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
     if (shortcutHeld()) {
         writeAfter = now + 0.08;
-        if (now >= nextWaitingNotice) {
-            emitMessage(@{@"request": pendingRequest, @"waiting": @YES});
-            nextWaitingNotice = now + 1;
-        }
+        notifyWriteWaiting(now);
         return;
     }
     if (now < writeAfter) return;
@@ -353,6 +330,14 @@ static void insertWhenReleased(void) {
     NSString *error = check(binding, &method);
     if (error) {
         finishWrite(error);
+        return;
+    }
+    if (method == NativeInput) {
+        postText(binding);
+        return;
+    }
+    if (nativeInputOffset) {
+        finishWrite(targetError);
         return;
     }
 
@@ -394,10 +379,6 @@ static void insertWhenReleased(void) {
     }
     if (shortcutHeld()) {
         writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
-        return;
-    }
-    if (method == NativePaste) {
-        pasteText(binding, pendingRequest, pendingText);
         return;
     }
     if (method == RangeReplacement) {
@@ -562,7 +543,7 @@ static void readRequests(void (^receive)(NSDictionary *)) {
         @synchronized (releaseRequests) {
             inputClosed = YES;
         }
-        dispatch_async(dispatch_get_main_queue(), ^{ requestExit(); });
+        dispatch_async(dispatch_get_main_queue(), ^{ exit(0); });
     });
 }
 
@@ -582,13 +563,6 @@ int main(void) {
                 if (bound && pid != bound.pid) invalidate(bound, focusError);
             }];
 
-        // The host may terminate the helper on Quit while native paste is in flight.
-        signal(SIGTERM, SIG_IGN);
-        dispatch_source_t termination = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGTERM, 0,
-                                                                dispatch_get_main_queue());
-        dispatch_source_set_event_handler(termination, ^{ requestExit(); });
-        dispatch_resume(termination);
-
         dispatch_source_t poll = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
         dispatch_source_set_timer(poll, dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), 50 * NSEC_PER_MSEC, 5 * NSEC_PER_MSEC);
         dispatch_source_set_event_handler(poll, ^{
@@ -600,7 +574,6 @@ int main(void) {
             dispatch_async(dispatch_get_main_queue(), ^{ handle(message); });
         });
         [NSApplication.sharedApplication run];
-        dispatch_source_cancel(termination);
     }
     return 0;
 }

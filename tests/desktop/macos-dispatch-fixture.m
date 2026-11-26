@@ -15,14 +15,16 @@
 @end
 
 static BOOL browser;
-static BOOL pasteOnly;
+static BOOL keyboardOnly;
 static BOOL alternateApplication;
 static BOOL canPostEvents = YES;
 static BOOL disabledField;
 static BOOL failWrite;
 static NSPasteboard *clipboard;
-static NSUInteger pasteKeyUps;
-static NSString *copyOnPaste;
+static NSUInteger keyUps;
+static BOOL delayInput;
+static BOOL switchAfterKeyPair;
+static NSMutableArray<dispatch_block_t> *delayedInput;
 static BOOL noObserverNotifications;
 static BOOL singleLine;
 static BOOL protectedField;
@@ -98,7 +100,7 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
     (void)options;
     assert([(__bridge NSArray *)keys isEqual:(@[@"AXFocusedWindow", @"AXFocusedUIElement"])]);
     *values = CFBridgingRetain(@[windows[focused], fields[focused]]);
-    if (pauseFinalFocus && editabilityChecks >= 2) {
+    if (pauseFinalFocus && editabilityChecks >= (keyboardOnly ? 1 : 2)) {
         pauseFinalFocus = NO;
         emitMessage(@{@"focusReadPaused": @YES});
         assert(dispatch_semaphore_wait(resumeFocus,
@@ -119,7 +121,7 @@ static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *al
         }
     }
     *allowed = (__bridge id)element == fields[0] && !readOnly && !noEditingOperation &&
-        CFEqual(key, (browser || pasteOnly) ? kAXValueAttribute : kAXSelectedTextAttribute);
+        CFEqual(key, (browser || keyboardOnly) ? kAXValueAttribute : kAXSelectedTextAttribute);
     return kAXErrorSuccess;
 }
 
@@ -132,7 +134,7 @@ static void applyEdit(NSUInteger document, CFRange range, NSString *text) {
 }
 
 static AXError editDocument(AXUIElementRef element, CFStringRef key, CFTypeRef value) {
-    assert(!browser && !pasteOnly && trusted && !readOnly && !modifiers && CFEqual(key, kAXSelectedTextAttribute));
+    assert(!browser && !keyboardOnly && trusted && !readOnly && !modifiers && CFEqual(key, kAXSelectedTextAttribute));
     writes++;
     if (failWrite) return kAXErrorFailure;
     applyEdit((__bridge id)element == fields[1], selection, (__bridge NSString *)value);
@@ -171,23 +173,37 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
 + (NSPasteboard *)fixtureGeneralPasteboard { return clipboard; }
 @end
 
-static void postPasteEvent(pid_t pid, CGEventRef event) {
-    assert(pasteOnly && pid == (alternateApplication ? 200 : 100));
-    assert(CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == kVK_ANSI_V);
-    assert(CGEventGetFlags(event) == kCGEventFlagMaskCommand);
+static void postKeyboardEvent(pid_t pid, CGEventRef event) {
+    assert(keyboardOnly && pid == (alternateApplication ? 200 : 100));
     if (CGEventGetType(event) == kCGEventKeyUp) {
-        pasteKeyUps++;
+        keyUps++;
+        if (switchAfterKeyPair) focused = 1;
         return;
     }
     assert(CGEventGetType(event) == kCGEventKeyDown);
-    NSString *text = [clipboard stringForType:NSPasteboardTypeString];
-    assert(text && trusted && !protectedField && !readOnly && !modifiers);
-    writes++;
-    applyEdit(focused, selection, text);
-    if (copyOnPaste) {
-        [clipboard clearContents];
-        [clipboard setString:copyOnPaste forType:NSPasteboardTypeString];
+    assert(trusted && !protectedField && !readOnly && !modifiers);
+    CGKeyCode key = (CGKeyCode)CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode);
+    CGEventFlags flags = CGEventGetFlags(event);
+    BOOL paste = key == kVK_ANSI_V && flags == kCGEventFlagMaskCommand;
+    NSString *characters = nil;
+    if (!paste) {
+        assert(key == 0xFF && flags == 0);
+        UniChar buffer[20];
+        UniCharCount length = 0;
+        CGEventKeyboardGetUnicodeString(event, 20, &length, buffer);
+        assert(length > 0 && length <= 20);
+        characters = [NSString stringWithCharacters:buffer length:length];
+        assert([characters canBeConvertedToEncoding:NSUTF8StringEncoding]);
     }
+    dispatch_block_t consume = ^{
+        // A paste event can be queued long before the app reads the clipboard.
+        NSString *text = paste ? [clipboard stringForType:NSPasteboardTypeString] : characters;
+        assert(text);
+        writes++;
+        applyEdit(focused, selection, text);
+    };
+    if (delayInput) [delayedInput addObject:consume];
+    else consume();
 }
 
 #define main packagedHelperMain
@@ -205,7 +221,7 @@ static void postPasteEvent(pid_t pid, CGEventRef event) {
 #define AXUIElementCopyParameterizedAttributeValue copyParameterized
 #define generalPasteboard fixtureGeneralPasteboard
 #define CGPreflightPostEventAccess() canPostEvents
-#define CGEventPostToPid postPasteEvent
+#define CGEventPostToPid postKeyboardEvent
 #include "../../desktop/mac-target.m"
 #undef generalPasteboard
 #undef main
@@ -241,13 +257,23 @@ static void handleFixture(NSDictionary *message) {
     trusted = ![options[@"denyAccessibility"] boolValue];
     readOnly = [options[@"readOnly"] boolValue];
     modifiers = [options[@"held"] boolValue];
-    copyOnPaste = options[@"copyOnPaste"];
+    delayInput = [options[@"delayInput"] boolValue];
+    switchAfterKeyPair = [options[@"switchAfterKeyPair"] boolValue];
+    NSString *copy = options[@"copyClipboard"];
+    if (copy) {
+        [clipboard clearContents];
+        [clipboard setString:copy forType:NSPasteboardTypeString];
+    }
+    if ([options[@"consumeInput"] boolValue]) {
+        for (dispatch_block_t consume in delayedInput) consume();
+        [delayedInput removeAllObjects];
+    }
     NSMutableDictionary *state = [@{
         @"text": documents[0], @"other": documents[1], @"writes": @(writes),
         @"focused": @(focused),
     } mutableCopy];
     if (browser) state[@"chunks"] = browserChunks;
-    if (pasteOnly) {
+    if (keyboardOnly) {
         NSMutableArray *items = [NSMutableArray array];
         for (NSPasteboardItem *item in clipboard.pasteboardItems) {
             NSMutableDictionary *types = [NSMutableDictionary dictionary];
@@ -255,7 +281,7 @@ static void handleFixture(NSDictionary *message) {
             [items addObject:types];
         }
         state[@"clipboard"] = items;
-        state[@"pasteKeyUps"] = @(pasteKeyUps);
+        state[@"keyUps"] = @(keyUps);
     }
     emitMessage(@{@"request": message[@"request"], @"fixture": state});
 }
@@ -265,7 +291,8 @@ static void runFixture(void) {
         windows[1] = windows[0];
         browserChunks = [NSMutableArray array];
     }
-    if (pasteOnly) {
+    if (keyboardOnly) {
+        delayedInput = [NSMutableArray array];
         clipboard = [NSPasteboard pasteboardWithUniqueName];
         NSPasteboardItem *first = [NSPasteboardItem new];
         [first setString:@"existing" forType:NSPasteboardTypeString];
@@ -301,7 +328,7 @@ int main(int argc, const char **argv) {
         fields[1] = CFBridgingRelease(AXUIElementCreateApplication(104));
         assert(argc == 2 || argc == 3);
         browser = strcmp(argv[1], "range") == 0;
-        pasteOnly = strcmp(argv[1], "paste") == 0;
+        keyboardOnly = strcmp(argv[1], "keyboard") == 0;
         alternateApplication = argc == 3;
         runFixture();
     }

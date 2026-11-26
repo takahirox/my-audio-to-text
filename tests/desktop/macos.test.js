@@ -257,7 +257,7 @@ async function dispatchFixture(t, operation, alternateApplication = false) {
     focusReadPaused: () => focusReadPaused, resumeFocus: () => target.request('resume-focus') };
 }
 
-for (const operation of ['selected text', 'range', 'paste']) {
+for (const operation of ['selected text', 'range', 'keyboard']) {
   test(`macOS ${operation} Cancel during the final focus read prevents native edits`, async t => {
     const { controller, configure, start, focusReadPaused, resumeFocus } = await dispatchFixture(t, operation);
     const id = await start();
@@ -274,7 +274,7 @@ for (const operation of ['selected text', 'range', 'paste']) {
     const before = await configure();
     assert.deepEqual(before, {
       ...state, ...(operation === 'range' ? { chunks: [] } : {}),
-      ...(operation === 'paste' ? { clipboard: before.clipboard, pasteKeyUps: 0 } : {}),
+      ...(operation === 'keyboard' ? { clipboard: before.clipboard, keyUps: 0 } : {}),
     });
 
     const next = await start();
@@ -284,7 +284,7 @@ for (const operation of ['selected text', 'range', 'paste']) {
     const inserted = { ...state, text: 'left|keep 東京🙂right', writes: 1 };
     assert.deepEqual(await configure(), {
       ...inserted, ...(operation === 'range' ? { chunks: ['keep 東京🙂'] } : {}),
-      ...(operation === 'paste' ? { clipboard: before.clipboard, pasteKeyUps: 1 } : {}),
+      ...(operation === 'keyboard' ? { clipboard: before.clipboard, keyUps: 1 } : {}),
     });
   });
 }
@@ -443,8 +443,8 @@ test('macOS equivalent editable fields accept the same selected-text edit in unr
   }
 });
 
-test('macOS native paste respects constraints and preserves all clipboard items or a newer copy', async t => {
-  const { controller, configure, start } = await dispatchFixture(t, 'paste', true);
+test('macOS delayed native input uses dictation text and preserves the clipboard', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard', true);
   const original = (await configure({ denyPostEvents: true })).clipboard;
   assert.equal(await start(), undefined);
   assert.match(controller.state.error, /post keyboard events/);
@@ -453,23 +453,37 @@ test('macOS native paste respects constraints and preserves all clipboard items 
     { 'public.utf8-plain-text': 'second' },
   ]);
 
-  await configure({ singleLine: true, limit: 1, selectionLength: 2 });
+  await configure({ delayInput: true, singleLine: true, limit: 1, selectionLength: 2 });
   let id = await start();
   assert.ok(id);
-  await controller.insert(id, '\nAB');
+  await controller.insert(id, 'AB');
   await controller.stop();
-  assert.deepEqual(await configure(), {
-    text: 'left|Aght', other: 'other', writes: 1, focused: 0, clipboard: original, pasteKeyUps: 1,
+  assert.deepEqual(await configure({ consumeInput: true, singleLine: true, limit: 1 }), {
+    text: 'left|Aght', other: 'other', writes: 1, focused: 0, clipboard: original, keyUps: 1,
   });
 
+  await configure({ delayInput: true });
   id = await start();
   assert.ok(id);
-  await configure({ copyOnPaste: 'new clipboard data' });
-  await assert.rejects(controller.insert(id, 'paste once'), /clipboard changed/);
+  const prefix = 'x'.repeat(19);
+  await controller.insert(id, prefix + '🙂東京\r\nか\u3099\t字\x1b\x7f\uF700');
+  await controller.stop();
+  assert.deepEqual(await configure({ copyClipboard: 'new clipboard data', consumeInput: true }), {
+    text: `left|A${prefix}🙂東京 か\u3099 字ght`, other: 'other', writes: 3, focused: 0,
+    clipboard: [{ 'public.utf8-plain-text': 'new clipboard data' }], keyUps: 3,
+  });
+});
+
+test('macOS native input stops sending text when focus changes between keyboard events', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  const { clipboard } = await configure({ switchAfterKeyPair: true });
+  const id = await start();
+  assert.ok(id);
+  const prefix = 'x'.repeat(20);
+  await assert.rejects(controller.insert(id, prefix + 'discard'), /changed or lost focus/);
   await controller.cancel();
   assert.deepEqual(await configure(), {
-    text: 'left|Apaste onceght', other: 'other', writes: 2, focused: 0,
-    clipboard: [{ 'public.utf8-plain-text': 'new clipboard data' }], pasteKeyUps: 2,
+    text: `left|${prefix}right`, other: 'other', writes: 1, focused: 1, clipboard, keyUps: 1,
   });
 });
 

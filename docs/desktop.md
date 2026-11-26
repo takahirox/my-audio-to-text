@@ -3,9 +3,9 @@
 My Audio to Text Desktop runs saved graphs locally from a resident menu-bar
 or tray application. macOS on Apple Silicon is the primary v1 target. The
 macOS app writes to the active editor, browser field, or other editable text
-control through Accessibility or native paste. The X11 app uses AT-SPI
-editing. Compatibility depends on the focused field and the editing methods
-it exposes.
+control through Accessibility editing or native keyboard input. The X11 app
+uses AT-SPI editing. Compatibility depends on the focused field and the
+editing methods it exposes.
 
 ## Build and launch
 
@@ -88,11 +88,11 @@ discarded.
 
 The macOS helper uses Accessibility selected-text editing or range replacement
 when the field exposes one of those operations. For an Accessibility-confirmed
-editable field without a direct operation, it can send one native paste to
-the active application. Paste temporarily uses the clipboard and restores its
-original items and formats if it still owns the clipboard. A concurrent copy
-takes precedence. Native paste requires macOS authorization to post keyboard
-events and access the clipboard.
+editable field without a direct operation, it sends Unicode text in keyboard
+events to the active application. This fallback requires macOS authorization
+to post keyboard events and leaves the clipboard untouched. It converts line
+breaks and tabs to spaces to avoid submitting forms or moving focus. Some
+applications ignore Unicode text supplied through keyboard events.
 
 Single-line fields, multiline fields, and selections use the target's editing
 rules. A field can normalize, truncate, or ignore a chunk. Protected, disabled,
@@ -232,8 +232,8 @@ native shortcut conflicts, residency after closing the window, and shortcut
 release at Quit. The suite also relaunches the package to verify Auto Save
 draft recovery. Dispatch fixtures use simulated Accessibility responses to
 exercise distinct application identities, selected-text and range editing,
-native paste and clipboard preservation, native constraints, protected
-fields, order, focus changes, and cancellation. A fixture-owned WebKit
+delayed keyboard input and clipboard preservation, native constraints,
+protected fields, order, focus changes, and cancellation. A fixture-owned WebKit
 window checks the installed browser engine's edit behavior, including Unicode,
 length limits and a line break in a single-line form field.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
