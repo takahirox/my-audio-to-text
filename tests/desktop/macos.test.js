@@ -458,11 +458,26 @@ test('macOS replaces the selection in an editable combo box and refuses a read-o
   assert.deepEqual(await configure(), { text: 'left|東京🙂ght', other: 'other', writes: 1, focused: 0 });
 });
 
-test('macOS refuses a combo box with a writable value but no text editing capability', async t => {
+test('macOS types into an autocomplete combo box with a writable value and selection range', async t => {
   const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
-  await configure({ comboBox: true });
-  assert.equal(await start(), undefined);
-  assert.match(controller.state.error, /exposes Accessibility editing/);
+  const field = { comboBox: true, singleLine: true, writableSelectionRange: true };
+  const { clipboard } = await configure({ ...field, selectionLength: 2 });
+  const id = await start();
+  assert.ok(id);
+  await controller.insert(id, '東京🙂');
+  await controller.stop();
+  assert.deepEqual(await configure(), {
+    text: 'left|東京🙂ght', other: 'other', writes: 1, focused: 0, clipboard, keyUps: 1,
+  });
+});
+
+test('macOS refuses keyboard input in selection-only and read-only combo boxes', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  for (const field of [{}, { readOnly: true, writableSelectionRange: true }]) {
+    await configure({ comboBox: true, ...field });
+    assert.equal(await start(), undefined);
+    assert.match(controller.state.error, /exposes Accessibility editing/);
+  }
   assert.equal((await configure()).writes, 0);
 });
 

@@ -77,8 +77,9 @@ static EditMethod editMethod(AXUIElementRef field, AXUIElementRef window) {
         }
     }
     if (writable(field, kAXSelectedTextAttribute)) return SelectedText;
-    // A selection-only combo box can expose a writable value without accepting text.
-    if (comboBox && ![editable isEqual:@YES]) return Unavailable;
+    // A selection-only combo box can expose a writable value. A settable text
+    // range also indicates text editing when the provider omits AXEditable.
+    if (comboBox && ![editable isEqual:@YES] && !writable(field, kAXSelectedTextRangeAttribute)) return Unavailable;
     return NativeInput;
 }
 
