@@ -50,8 +50,7 @@ alongside the executable.
 Use an EWMH-compatible X11 window manager such as Openbox. Install `trayer`
 and run `trayer --edge top --align right` before launching the app. Disable
 any StatusNotifierItem tray hosts or plugins in that session so Electron uses
-its GTK/XEmbed fallback. Tray Start needs that backend to remember the focused
-field when its menu opens. [Electron Linux tray behavior](https://www.electronjs.org/docs/latest/api/tray#linux).
+its GTK/XEmbed fallback. [Electron Linux tray behavior](https://www.electronjs.org/docs/latest/api/tray#linux).
 
 ## Voice typing
 
@@ -62,9 +61,10 @@ field when its menu opens. [Electron Linux tray behavior](https://www.electronjs
 3. Press **Control+Option+Command+D** on macOS or **Ctrl+Alt+Shift+D** on X11.
    The indicator shows **Preparing** while the graph loads and **Recording**
    once microphone capture starts.
-4. Speak Japanese. Committed text goes to the authorized caret. Press the same
-   shortcut or **Stop** on the indicator to finish and drain accepted audio.
-   **Cancel voice typing** in the tray discards work still pending.
+4. Speak Japanese. Committed text goes to the field focused when each chunk
+   is delivered. Switch fields, windows, or apps while recording. Press the
+   same shortcut or **Stop** on the indicator to finish and drain accepted
+   output. **Cancel voice typing** in the tray discards work still pending.
 
 The tray provides Start and Stop, the current shortcut graph, Graph Library,
 Models, Settings, and Quit. Closing the management window leaves the tray and
@@ -79,20 +79,23 @@ enable assistive technology in the session and reopen the target application.
 
 ### Focused fields
 
-The macOS helper binds the active application at key-down or before opening
-the tray menu. It also binds the window and exact field whenever macOS can
-identify them. Before each dispatch it rechecks the available focus information
-and waits for the shortcut and modifiers to be released. A release from an
-ended voice typing or Display-only Live session is discarded.
+Each nonempty committed TEXT chunk follows the current focus. A chunk can go
+to the new field even if you began speaking before switching focus. Recording
+continues through focus changes. Stop drains accepted chunks using the same
+rule. Cancel or Quit discards pending chunks and finishes any clipboard
+cleanup for a Paste already sent.
 
-Each nonempty committed TEXT chunk is staged on the system clipboard and
-pasted as it arrives during recording. Repeated commits are pasted separately.
+On macOS, the helper waits for the shortcut and modifiers to be released,
+stages the text on the system clipboard, and checks the current focus just
+before sending Command+V. Repeated commits are pasted separately.
 Provisional hypotheses stay out of the focused field. The helper stages
-Unicode, whitespace, line breaks, and tabs as plain text. The application
+Unicode, whitespace, line breaks, and tabs as plain text. The current app
 handles Paste normally, including selection replacement, formatting,
-truncation, or rejection. The helper refuses secure keyboard input and
-fields that macOS identifies as protected, disabled, or read-only. Fields
-with incomplete Accessibility editing metadata can receive Paste.
+truncation, or rejection. Fields with incomplete Accessibility editing
+metadata can receive Paste. Secure Keyboard Entry, a missing foreground
+app, an identified menu, or a field identified as protected, disabled, or
+read-only causes the helper to skip the chunk. Skipped chunks are discarded
+and delivery resumes with the next committed chunk in a usable field.
 
 The helper gives each Paste 250 ms to read the clipboard before attempting
 to restore the previous clipboard and starting the next chunk. It preserves
@@ -108,24 +111,19 @@ clipboard items for the current Mac only. It marks the temporary text as
 transient. Clipboard history or clipboard managers can still record the
 temporary text or restored items.
 
-A detected focus change or the loss of a previously verified identity stops
-the session and discards pending output. If macOS reports only the active
-application, changes within it may be invisible to the helper. Paste already
-in flight can reach a different field if focus changes after the final check.
-Stop drains accepted chunks while the target remains authorized. Cancel or
-Quit discards pending chunks and lets the helper finish clipboard cleanup,
-including the settling interval for an already posted Paste. Wait for the
-session to finish before switching fields or apps.
+Switching focus as a Paste is sent can affect which field receives it.
+Allow a chunk to appear before switching if it needs to land in a particular
+field.
 
-On X11, the focused control must expose AT-SPI `Text` and `EditableText`
-interfaces. Place a caret in an editable span. AT-SPI inserts at the caret
-and can apply the field's native constraints. Its insertion operation works
-at an offset, so clear any selection before starting. A browser or custom
-editor may expose text for reading without an editing interface. In the
-Debian X11 fixture, Chromium 156 exposes its tested web fields that way.
-The shortcut binds at key-down and starts or stops on key release. The tray
-checks the field captured before opening the XEmbed menu. Wayland, Windows,
-mobile and system audio capture are outside v1.
+On X11, the helper resolves the current focused field for each chunk. The
+control must expose AT-SPI `Text` and `EditableText` interfaces. Place a
+caret in an editable span and clear any selection. AT-SPI inserts at the
+caret offset and can apply the field's native constraints. It skips chunks
+while the focus is unavailable, protected, or unsupported. A browser or
+custom editor may expose text for reading without an editing interface. In
+the Debian X11 fixture, Chromium 156 exposes its tested web fields that way.
+The shortcut starts or stops on key release. Wayland, Windows, mobile and
+system audio capture are outside v1.
 
 ## Manual test on macOS
 
@@ -163,10 +161,13 @@ using the [Apple Silicon build commands](#apple-silicon-macos).
 3. Press **Control+Option+Command+D** and wait for **Recording**. Dictate
    a few short phrases with pauses, such as `こんにちは` and `ありがとう`.
    Check that successive chunks appear while you are still recording.
-4. Press the shortcut again to Stop. When the session finishes, use Paste in
+4. While still recording, move to a second field in the same app and dictate
+   another phrase. Switch to a second app, focus a text field, and dictate
+   again. Check that the chunks appear in the fields focused at delivery
+   and that the indicator stays on **Recording** throughout.
+5. Press the shortcut again to Stop. When the session finishes, use Paste in
    a scratch field to confirm the original sample is still on the clipboard.
-   In a separate run you can move focus or choose **Cancel voice typing**
-   from the menu to check that pending chunks are discarded.
+   In a separate run, choose **Cancel voice typing** to discard pending chunks.
 
 ## Graphs and models
 
@@ -186,8 +187,8 @@ graph. Desktop rejects graph nodes outside its supported subset and shows
 the original import error.
 A running graph uses the last saved snapshot taken at Start. Edits apply to the
 next session. Use **Live** to run Display graphs inside the management window.
-Graphs with both Display and a focused output start from a valid external
-caret and retain the latest Display panes for inspection in Live.
+Graphs with both Display and a focused output start from the global shortcut
+or tray and retain the latest Display panes for inspection in Live.
 
 Models uses the shared [verified asset lifecycle](model-assets.md) and
 [Moonshine model pin and notices](optional-asr-nodes.md).
@@ -204,9 +205,9 @@ Apple's Carbon, Accessibility and AppKit frameworks. The Linux helper uses
 the distribution's AT-SPI and X11 bindings.
 
 The main process owns the tray, global shortcut, permission policy, saved
-graph snapshots, and authorized target. Its X11 helper takes the active window,
-matches its process and focused AT-SPI object, and holds that identity for the
-session. It revalidates it before every insertion and uses the object's
+graph snapshots, and session authorization for committed output. At delivery
+the X11 helper matches the active window to its process and focused AT-SPI
+object, checks the caret, and uses the object's
 [EditableText insertion method](https://gnome.pages.gitlab.gnome.org/at-spi2-core/libatspi/method.EditableText.insert_text.html).
 Both platform helpers use private process pipes. They send text and leave
 submission to the user.
@@ -259,7 +260,7 @@ and a separate Swift driver. The driver sends the shortcut and uses
 Accessibility to observe TextEdit and exercise the menu. The tests open
 a separate instance of Safari from `/Applications`. Use a test account with
 Safari extensions disabled. A local page checks Unicode insertion in order at
-the authorized caret, normal length limits, password-field refusal, unchanged
+the current caret, normal length limits, password-field refusal, unchanged
 read-only values, and zero form submissions.
 
 Build the driver at a stable path, then run its permission preflight.
@@ -293,12 +294,13 @@ DESKTOP_REAL_ASR=1 npm run test:desktop
 The X11 suite starts the packaged application, Mousepad, a GTK safety fixture,
 and Chromium with a fresh profile and extensions disabled. The Mousepad tests
 check shortcut Start and Stop, exactly-once Unicode insertion at the caret,
-and safe cancellation when the target changes, including when the Stop
-shortcut is released. The separate GTK fixture checks successful input to a
-length-limited single-line entry and multiline buffer, plus refusal of a
-password field and locked text. The Chromium 156 fixture checks refusal
-when AT-SPI editing is unavailable and confirms that field values, caret,
-focus, and form submission state are preserved. Put
+and final delivery to a newly focused tab when the Stop shortcut is
+released. The separate GTK fixture checks delivery across fields, native
+limits in single-line and multiline controls, and safe skips for password
+fields and locked text. The Chromium 156 fixture checks skips when AT-SPI
+editing is unavailable, confirms that field values, caret, focus, and form
+submission state are preserved, and verifies the next chunk reaches an
+eligible editor in another app. Put
 `chromium` on `PATH` or set `DESKTOP_TEST_CHROMIUM` to its executable path.
 The model smoke additionally downloads the pinned
 weights, plays a licensed speech fixture into a virtual microphone, and tests

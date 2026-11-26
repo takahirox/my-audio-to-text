@@ -228,10 +228,11 @@ const originalClipboard = [
 
 function dispatchFixture(t, tool) {
   const target = new FocusedTarget(tool, [], {
-    onInvalid: (id, error) => { void controller.cancel(error, id); },
+    onFailure: (id, error) => { void controller.cancel(error, id); },
     onLost: () => {},
   });
-  const controller = new DesktopSession({ target, run: async () => {}, onChange: () => {} });
+  const runtime = [];
+  const controller = new DesktopSession({ target, run: async (action, id) => { runtime.push([action, id]); }, onChange: () => {} });
   const lines = createInterface({ input: target.connect().process.stdout });
   t.after(() => {
     lines.close();
@@ -253,13 +254,12 @@ function dispatchFixture(t, tool) {
     return current.keyDowns === count && current;
   }, 'The helper did not dispatch the expected number of pastes');
   const start = async () => {
-    await target.request('snapshot-tray');
-    await controller.start({ focused: true, microphone: false, displays: [], graph: {} }, 'bind-tray');
+    await controller.start({ focused: true, microphone: true, displays: [], graph: {} });
     return controller.current?.id;
   };
   // The stdin reader signals the blocked AX call without waiting for main.
   const resumeFocus = () => target.connect().process.stdin.write('{"action":"resume-focus"}\n');
-  return { target, controller, configure, dispatched, start, resumeFocus, waiting: () => waiting, focusReadPaused: () => focusReadPaused };
+  return { target, controller, configure, dispatched, start, runtime, resumeFocus, waiting: () => waiting, focusReadPaused: () => focusReadPaused };
 }
 
 test('macOS clipboard paste', async t => {
@@ -267,7 +267,7 @@ test('macOS clipboard paste', async t => {
 
   await t.test('streams rapid committed TEXT through a delayed AppKit editor read', async t => {
     const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
-    await configure({ frontPid: 200, noRole: true, noField: true, noWindow: true });
+    await configure({ frontPid: 200, noRole: true, noField: true });
     const id = await start();
     assert.ok(id);
     let source;
@@ -406,7 +406,7 @@ test('macOS clipboard paste', async t => {
     const { controller, configure, start, focusReadPaused, resumeFocus } = dispatchFixture(t, tool);
     const id = await start();
     await configure({ pauseAfterStage: true });
-    const first = assert.rejects(controller.insert(id, 'staged'), /changed or lost focus/);
+    const first = assert.rejects(controller.insert(id, 'staged'), /no longer authorized/);
     const second = assert.rejects(controller.insert(id, 'queued'), /no longer authorized/);
     await eventually(focusReadPaused, 'The helper did not reach its dispatch focus check');
     const canceled = controller.cancel();
@@ -478,22 +478,44 @@ test('macOS clipboard paste', async t => {
     assert.equal(controller.state.error, '');
   });
 
-  await t.test('refuses known protection and authorization failures at Start or dispatch', async t => {
-    const cases = [
-      ['protected', true, /protected/], ['secureInput', true, /Secure Keyboard Entry/],
-      ['disabled', true, /disabled/], ['readOnly', true, /read-only/], ['notEditable', true, /read-only/],
-      ['canPost', false, /post keyboard events/], ['trusted', false, /Accessibility/],
-    ];
-    for (const [option, value, error] of cases) {
+  await t.test('skips unavailable and protected targets and resumes with the next chunk', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+    await configure({ frontPid: 0 });
+    const id = await start();
+    assert.ok(id);
+    await controller.insert(id, 'no foreground');
+    await configure({ frontPid: 100 });
+    for (const option of ['protected', 'secureInput', 'disabled', 'readOnly', 'notEditable', 'menu']) {
+      await configure({ [option]: true });
+      await controller.insert(id, option);
+      assert.equal(controller.current.id, id);
+      assert.equal(controller.state.phase, 'running');
+      assert.equal(controller.state.error, '');
+      const skipped = await configure({ [option]: false });
+      assert.equal(skipped.keyDowns, 0);
+      assert.deepEqual(skipped.clipboard, originalClipboard);
+    }
+
+    const pending = controller.insert(id, 'eligible');
+    await dispatched(1);
+    const state = await configure({ advance: 250 });
+    await pending;
+    await controller.stop();
+    assert.deepEqual(state.reads, ['eligible']);
+    assert.equal(state.text, 'lefteligibleright');
+  });
+
+  await t.test('permission failures still prevent Start or stop delivery', async t => {
+    for (const [option, error] of [['canPost', /post keyboard events/], ['trusted', /Accessibility/]]) {
       const { controller, configure, start } = dispatchFixture(t, tool);
-      await configure({ [option]: value });
+      await configure({ [option]: false });
       assert.equal(await start(), undefined);
       assert.match(controller.state.error, error);
 
-      await configure({ [option]: !value });
+      await configure({ [option]: true });
       const id = await start();
       assert.ok(id);
-      await configure({ [option]: value });
+      await configure({ [option]: false });
       await assert.rejects(controller.insert(id, 'must not dispatch'), error);
       await controller.current?.canceling;
       const state = await configure();
@@ -502,39 +524,46 @@ test('macOS clipboard paste', async t => {
     }
   });
 
-  await t.test('stops on an observed app, window or field change', async t => {
-    const cases = [
-      [{ noField: true, noWindow: true }, { frontPid: 200 }],
-      [{ noField: true }, { focused: 1 }],
-      [{ noField: true, systemField: true, sameWindow: true }, { switchAfterStage: true }],
-    ];
-    for (const [initial, changed] of cases) {
-      const { controller, configure, start } = dispatchFixture(t, tool);
-      await configure(initial);
-      const id = await start();
-      assert.ok(id);
-      await configure(changed);
-      await assert.rejects(controller.insert(id, 'must not cross targets'), /changed or lost focus/);
-      await controller.current?.canceling;
-      const state = await configure();
-      assert.equal(state.keyDowns, 0);
-      assert.equal(state.other, 'other');
-      assert.deepEqual(state.clipboard, originalClipboard);
-    }
+  await t.test('follows fields and apps while recording, including during the queue and clipboard staging', async t => {
+    const { controller, configure, dispatched, start, runtime } = dispatchFixture(t, tool);
+    const id = await start();
+    const first = controller.insert(id, 'A');
+    const second = controller.insert(id, 'B');
+    const third = controller.insert(id, 'C');
+    await dispatched(1);
+    await configure({ focused: 1, advance: 250 });
+    await first;
+    await dispatched(2);
+    await configure({ switchAppAfterStage: 200, advance: 250 });
+    await second;
+    assert.equal(controller.current.id, id);
+    assert.equal(controller.state.microphone, true);
+    assert.deepEqual(runtime, [['start', id]]);
+
+    await dispatched(3);
+    const stopped = controller.stop();
+    const state = await configure({ advance: 250 });
+    await Promise.all([third, stopped]);
+    assert.deepEqual(runtime, [['start', id], ['stop', id]]);
+    assert.deepEqual(state.reads, ['A', 'B', 'C']);
+    assert.equal(state.text, 'leftAright');
+    assert.match(state.other, /B/);
+    assert.match(state.external, /C/);
+    assert.equal(state.keyDowns, 3);
+    assert.equal(state.keyUps, 3);
+    assert.deepEqual(state.clipboard, originalClipboard);
   });
 
-  await t.test('restores the clipboard without posting Paste when focus moves during the last protection check', async t => {
-    const { controller, configure, start } = dispatchFixture(t, tool);
-    await configure({ sameWindow: true });
+  await t.test('rechecks the current field if focus moves during protection checks', async t => {
+    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
     const id = await start();
-    assert.ok(id);
-    await configure({ switchDuringProtection: true });
-
-    await assert.rejects(controller.insert(id, 'must not cross fields'), /changed or lost focus/);
-    await controller.current?.canceling;
-    const state = await configure();
-    assert.equal(state.keyDowns, 0);
-    assert.equal(state.keyUps, 0);
+    await configure({ noField: true, systemField: true, switchDuringProtection: true });
+    const pending = controller.insert(id, 'new focus');
+    await dispatched(1);
+    const state = await configure({ advance: 250 });
+    await pending;
+    assert.equal(state.text, 'left|right');
+    assert.match(state.other, /new focus/);
     assert.deepEqual(state.clipboard, originalClipboard);
   });
 });
@@ -603,8 +632,7 @@ test('macOS Quit waits for clipboard restoration when the helper is stalled afte
         if (JSON.parse(line).focusReadPaused) globalThis.testFocusReadPaused = true;
       });
       await this.target.request('fixture', null, { pauseAfterStage: true, focusStallMs: 4000, quitReport });
-      await this.target.request('snapshot-tray');
-      await start.call(this, { ...plan, focused: true }, 'bind-tray');
+      await start.call(this, { ...plan, focused: true });
       const id = this.current.id;
       void this.insert(id, 'staged during Quit').catch(() => {});
       void this.insert(id, 'queued during Quit').catch(() => {});
@@ -738,7 +766,7 @@ test('macOS host ignores a shortcut release from an ended Display-only session',
       // Control only the shortcut message timing at the helper boundary.
       if (action === 'shortcut-context' && token) {
         globalThis.releaseTestShortcut = value => this.worker.process.stdout.emit('data', Buffer.from(
-          JSON.stringify({ shortcut: value, release: 0, context: text }) + '\n',
+          JSON.stringify({ shortcut: value, context: text }) + '\n',
         ));
       }
       return request.call(this, action, token, text);
@@ -812,7 +840,7 @@ test('native shortcut and menu insert ordered Unicode at the TextEdit caret with
   assert.equal(text(), prefix + ' held tray right');
 });
 
-test('held macOS shortcut cannot restart ended Live or commit after cancellation or a change of target', {
+test('held macOS shortcut respects ended sessions and drains to the current app on Stop', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
@@ -821,7 +849,6 @@ test('held macOS shortcut cannot restart ended Live or commit after cancellation
   const { desktop, management, view } = app;
   const emit = await textProducer(desktop);
   await selectFocusedGraph(app, 'Held shortcut target');
-  const second = await externalEditor(t, run, 'other target', 'other');
   const first = await externalEditor(t, run, 'original target', 'left|right');
   run('caret', '5');
 
@@ -853,24 +880,28 @@ test('held macOS shortcut cannot restart ended Live or commit after cancellation
   assert.equal((await view()).session.error, '');
   assert.equal(first.text(), 'left|right');
 
+  const safari = await externalSafari(t, run);
+  run('activate', String(first.pid));
+  await eventually(() => Number(run('front-pid')) === first.pid, 'TextEdit did not receive focus');
   run('shortcut');
   await runningWithExternalFocus(app, run, first.pid);
   run('shortcut-down');
   try {
-    await emit('must never cross windows🙂\n');
+    await emit('new app🙂');
     await wait(250);
     assert.equal(first.text(), 'left|right');
-    run('activate', String(second.pid));
-    await eventually(() => Number(run('front-pid')) === second.pid, 'The second TextEdit window did not receive focus');
-    assert.match((await idle(view)).error, /changed or lost focus/);
+    run('activate', String(safari.pid));
+    await safari.focus('notes', 5);
+    await runningWithExternalFocus(app, run, safari.pid);
   } finally { run('shortcut-up'); }
-  assert.equal(second.text(), 'other');
+  assert.equal((await idle(view)).error, '');
+  assert.equal(safari.state().values.notes, 'left|new app🙂right');
   run('activate', String(first.pid));
-  await eventually(() => Number(run('front-pid')) === first.pid, 'The original TextEdit window did not receive focus');
+  await eventually(() => Number(run('front-pid')) === first.pid, 'TextEdit did not regain focus');
   assert.equal(first.text(), 'left|right');
 });
 
-test('macOS rejects a pending edit when focus moves between documents in the same TextEdit process', {
+test('macOS drains pending text to the current document in the same TextEdit process', {
   skip: process.env.DESKTOP_MACOS_EDITOR !== '1', timeout: 90000,
 }, async t => {
   const run = await inputFixture(t);
@@ -897,13 +928,13 @@ test('macOS rejects a pending edit when focus moves between documents in the sam
   await runningWithExternalFocus(app, run, pid);
   run('shortcut-down');
   try {
-    await emit('must never reach either document🙂');
+    await emit('new document🙂');
     await wait(250);
     assert.equal(text(), 'left|right');
     await focus(other);
   } finally { run('shortcut-up'); }
-  assert.match((await idle(app.view)).error, /changed or lost focus/);
-  assert.equal(text(), otherText);
+  assert.equal((await idle(app.view)).error, '');
+  assert.equal(text(), otherText + 'new document🙂');
   await focus(original);
   assert.equal(text(), 'left|right');
 });
@@ -951,29 +982,13 @@ test('native Safari receives ordered Unicode without submitting and refuses prot
   assert.equal(safari.state().submits, 0);
   assert.equal(safari.state().values.field, 'left|right');
 
-  const indicator = app.desktop.windows().find(page => page.url().endsWith('/indicator.html'));
-  const dismissError = async () => {
-    await indicator.getByRole('button', { name: 'Dismiss' }).evaluate(button => button.click());
-    await eventually(async () => !(await app.view()).session.error, 'The previous error was not dismissed');
-  };
-  if ((await app.view()).session.error) await dismissError();
   for (const field of ['password', 'readonly']) {
     const original = await safari.focus(field, 1);
     run('shortcut');
-    const session = await eventually(async () => {
-      const { session } = await app.view();
-      return (session.phase === 'running' || (session.phase === 'idle' && session.error)) && session;
-    }, `The packaged app did not handle ${field}`);
-    if (field === 'password' || session.error) {
-      assert.match(session.error, field === 'password' ? /protected|Secure Keyboard Entry/ : /read-only/);
-      await dismissError();
-    } else {
-      // Safari can expose a read-only field without an explicit read-only flag.
-      // In that case its native editor is responsible for ignoring the input.
-      await emit('must not change this field');
-      run('shortcut');
-      assert.equal((await idle(app.view)).error, '');
-    }
+    await runningWithExternalFocus(app, run, safari.pid);
+    await emit('must not change this field');
+    run('shortcut');
+    assert.equal((await idle(app.view)).error, '');
     const after = await eventually(() => safari.state().report > original.report && safari.state(),
       'Safari did not report its state after the protected field check');
     assert.deepEqual(after.values, original.values);
