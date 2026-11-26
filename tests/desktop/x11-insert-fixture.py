@@ -56,7 +56,7 @@ class InsertTest(unittest.TestCase):
         self.frame.get_state_set().contains.return_value = True
         self.field = Field()
         self.focus.window = lambda: self.window
-        self.focus.locate = lambda _: (self.frame, self.field)
+        self.focus.locate = lambda *_: (self.frame, self.field)
         self.focus.editable = self.require_focused
         self.request("authorize")
 
@@ -119,6 +119,22 @@ class InsertTest(unittest.TestCase):
         self.field.offset = 1
         self.request("insert", text="C")
         self.assertEqual((self.field.text, self.field.offset), ("AC", 2))
+
+    def test_failed_insert_allows_new_chunks_when_count_and_caret_are_unchanged(self):
+        recovered = self.field
+        failure = helper["GLib"].Error("Insert failed before editing")
+        with patch.object(recovered, "insert_text", side_effect=failure) as insert:
+            self.request("insert", text="skip")
+            insert.assert_called_once_with(0, "skip", 4)
+        self.assertEqual((recovered.text, recovered.offset), ("", 0))
+
+        other = self.field = Field()
+        self.request("insert", text="other")
+        self.assertEqual(other.text, "other")
+        self.field = recovered
+        self.request("insert", text="A")
+        self.request("insert", text="B")
+        self.assertEqual((recovered.text, recovered.offset), ("AB", 2))
 
 
 if __name__ == "__main__":

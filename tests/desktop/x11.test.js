@@ -184,7 +184,7 @@ test('Cancel during X11 target lookup revokes the pending edit', () => {
   ]);
 });
 
-test('X11 edits recheck focus and preserve chunk order when caret advancement fails', () => {
+test('X11 edits recheck focus and recover from transient failures in order', () => {
   execFileSync('/usr/bin/python3', ['-B', 'tests/desktop/x11-insert-fixture.py'], {
     encoding: 'utf8', timeout: 5000,
   });
@@ -361,6 +361,38 @@ async function committedText(app) {
   });
   return text => runtime.evaluate(chunk => window.runtimeHost.insert(window.testSession, chunk), text);
 }
+
+test('packaged app skips a stalled GTK target and keeps delivering in the same session', { timeout: 60000 }, async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'desktop-x11-stall-'));
+  t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
+  const { app, page, phase, view } = await launch(t);
+  await importGraph(page, 'Stall fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
+  await selectGraph(page, 'Stall fixture');
+  const commit = await committedText(app);
+  x('key', 'alt+F4');
+  const native = await editor(t, dir);
+  const stalled = await gtkFixture(t, dir);
+  await trigger(stalled.id);
+  await phase('running');
+  const initial = stalled.get().values;
+
+  assert.ok(stalled.process.kill('SIGSTOP'));
+  try {
+    await commit('skip stalled target');
+    assert.equal((await view()).session.phase, 'running');
+    await activate(native.id);
+    await commit('next');
+    await eventually(() => native.get().values[1] === 'left|nextright',
+      'The next chunk did not reach the responsive editor');
+    assert.equal((await view()).session.phase, 'running');
+  } finally {
+    stalled.process.kill('SIGCONT');
+  }
+  await trigger(stalled.id);
+  await phase('idle');
+  assert.equal((await view()).session.error, '');
+  assert.deepEqual(stalled.get().values, initial);
+});
 
 test('packaged app follows GTK focus and skips protected controls during a session', { timeout: 60000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-gtk-limits-'));
