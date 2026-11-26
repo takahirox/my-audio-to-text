@@ -6,12 +6,7 @@
 
 static NSString *const permissionError =
     @"Allow My Audio to Text in System Settings → Privacy & Security → Device Control and Data Access (Accessibility), then start again.";
-static NSString *const targetError = @"Focus the app where you want to type and start again.";
-static NSString *const focusError = @"The authorized window or text field changed or lost focus.";
-static NSString *const protectedFieldError = @"The focused field is protected. Focus a different field and start again.";
-static NSString *const disabledFieldError = @"The focused field is disabled. Focus an editable field and start again.";
-static NSString *const readOnlyFieldError = @"The focused field is read-only. Focus an editable field and start again.";
-static NSString *const secureInputError = @"macOS Secure Keyboard Entry is active. Focus a field that accepts ordinary input and start again.";
+static NSString *const authorizationError = @"The voice typing session is no longer authorized.";
 static NSString *const keyboardPermissionError =
     @"Allow My Audio to Text to post keyboard events under Device Control and Data Access (Accessibility) in System Settings → Privacy & Security, then start again.";
 static NSString *const keyboardError = @"Could not send the Paste shortcut. Voice typing stopped.";
@@ -35,48 +30,26 @@ static id elementAttribute(AXUIElementRef element, CFStringRef key) {
     return asElement(attribute(element, key));
 }
 
-static NSString *fieldError(AXUIElementRef field) {
-    if ([attribute(field, kAXFocusedAttribute) isEqual:@NO]) return focusError;
+static BOOL allowsPaste(AXUIElementRef field) {
     id role = attribute(field, kAXRoleAttribute);
     id subrole = attribute(field, kAXSubroleAttribute);
-    if ([role isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole] ||
-        [subrole isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole]) return protectedFieldError;
-    if ([attribute(field, kAXEnabledAttribute) isEqual:@NO]) return disabledFieldError;
-    if ([attribute(field, CFSTR("AXReadOnly")) isEqual:@YES] ||
-        [attribute(field, CFSTR("AXEditable")) isEqual:@NO]) return readOnlyFieldError;
-    return nil;
+    return ![attribute(field, kAXFocusedAttribute) isEqual:@NO] &&
+        ![role isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole] &&
+        ![subrole isEqual:(__bridge NSString *)kAXSecureTextFieldSubrole] &&
+        ![role isEqual:(__bridge NSString *)kAXMenuRole] &&
+        ![role isEqual:(__bridge NSString *)kAXMenuBarRole] &&
+        ![role isEqual:(__bridge NSString *)kAXMenuItemRole] &&
+        ![role isEqual:(__bridge NSString *)kAXMenuBarItemRole] &&
+        ![attribute(field, kAXEnabledAttribute) isEqual:@NO] &&
+        ![attribute(field, CFSTR("AXReadOnly")) isEqual:@YES] &&
+        ![attribute(field, CFSTR("AXEditable")) isEqual:@NO];
 }
 
-@interface Binding : NSObject
-@property pid_t pid;
-// ARC retains the CF-backed accessibility elements as Objective-C objects.
-@property (strong) id application;
-@property (strong) id window;
-@property (strong) id area;
-@property (strong) NSString *failed;
-@property AXObserverRef observer;
-@end
-
-@implementation Binding
-- (void)dealloc {
-    if (_observer) {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(_observer), kCFRunLoopCommonModes);
-        CFRelease(_observer);
-    }
-}
-@end
-
-static Binding *candidate;
-static Binding *trayCandidate;
-static Binding *bound;
 static NSString *token;
-static NSNumber *snapshotNumber;
-static NSNumber *nextSnapshot;
 static EventHotKeyRef hotkey;
 static UInt32 hotkeyID;
 static NSString *shortcut;
 static BOOL held;
-static BOOL shortcutSessionActive;
 static NSNumber *shortcutContext;
 static NSNumber *heldContext;
 static BOOL waitingForRelease;
@@ -113,113 +86,43 @@ static void finishWrite(NSString *error) {
     if (request) respond(request, error);
 }
 
-static void invalidate(Binding *binding, NSString *error) {
-    if (!binding || binding.failed) return;
-    binding.failed = error;
-    if (binding == bound) {
-        finishWrite(error);
-        emitMessage(@{@"invalid": token, @"error": error});
-    }
+static pid_t foregroundPID(void) {
+    return NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
 }
 
-static void focusedChanged(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *context) {
-    (void)observer;
-    (void)element;
-    (void)notification;
-    // Copy the strong reference before any invalidation can release it.
-    Binding *binding = (__bridge Binding *)context;
-    invalidate(binding, focusError);
+static id focusedField(AXUIElementRef application, pid_t pid) {
+    id field = elementAttribute(application, kAXFocusedUIElementAttribute);
+    if (field) return field;
+
+    AXUIElementRef system = AXUIElementCreateSystemWide();
+    field = elementAttribute(system, kAXFocusedUIElementAttribute);
+    CFRelease(system);
+    pid_t owner = 0;
+    if (field && AXUIElementGetPid((__bridge AXUIElementRef)field, &owner) == kAXErrorSuccess && owner == pid) {
+        return field;
+    }
+    return nil;
 }
 
-static BOOL hasBoundFocus(Binding *binding) {
-    NSWorkspace *workspace = NSWorkspace.sharedWorkspace;
-    if (workspace.frontmostApplication.processIdentifier != binding.pid) return NO;
-
-    AXUIElementRef application = (__bridge AXUIElementRef)binding.application;
-    NSArray *keys = @[(__bridge NSString *)kAXFocusedWindowAttribute, (__bridge NSString *)kAXFocusedUIElementAttribute];
-    CFArrayRef values = NULL;
-    id window = nil, area = nil;
-    // A provider can return one focus attribute and an error for the other.
-    if (AXUIElementCopyMultipleAttributeValues(application, (__bridge CFArrayRef)keys, 0, &values) == kAXErrorSuccess) {
-        NSArray *focus = CFBridgingRelease(values);
-        if (focus.count == keys.count) {
-            window = asElement(focus[0]);
-            area = asElement(focus[1]);
-        }
-    } else {
-        window = elementAttribute(application, kAXFocusedWindowAttribute);
-        area = elementAttribute(application, kAXFocusedUIElementAttribute);
+static pid_t pasteTarget(void) {
+    // Inspect only the current foreground app. Refresh once if it or the
+    // focused element changes during the protection checks.
+    for (unsigned attempt = 0; attempt < 2; attempt++) {
+        pid_t pid = foregroundPID();
+        if (pid <= 0) return 0;
+        AXUIElementRef application = AXUIElementCreateApplication(pid);
+        AXUIElementSetMessagingTimeout(application, 0.25);
+        id field = focusedField(application, pid);
+        BOOL allowed = allowsPaste((__bridge AXUIElementRef)field);
+        id latest = focusedField(application, pid);
+        CFRelease(application);
+        if (foregroundPID() == pid && (field == latest || [field isEqual:latest])) return allowed ? pid : 0;
     }
-    if (!area) {
-        AXUIElementRef system = AXUIElementCreateSystemWide();
-        id focused = elementAttribute(system, kAXFocusedUIElementAttribute);
-        CFRelease(system);
-        pid_t pid = 0;
-        if (focused && AXUIElementGetPid((__bridge AXUIElementRef)focused, &pid) == kAXErrorSuccess) {
-            if (pid != binding.pid) return NO;
-            area = focused;
-        }
-    }
-    id owner = elementAttribute((__bridge AXUIElementRef)area, kAXWindowAttribute);
-    if (window && owner && ![window isEqual:owner]) return NO;
-    window = window ?: owner;
-
-    // An initially unknown identity may become observable. Once bound to an
-    // identity, require it to still match before sending more text.
-    if ((binding.window && ![binding.window isEqual:window]) || (binding.area && ![binding.area isEqual:area]) ||
-        workspace.frontmostApplication.processIdentifier != binding.pid) return NO;
-    if (!binding.window) binding.window = window;
-    if (!binding.area) binding.area = area;
-    return YES;
+    return 0;
 }
 
-static Binding *captureTarget(void) {
-    Binding *result = [Binding new];
-    if (!AXIsProcessTrusted()) {
-        result.failed = permissionError;
-        return result;
-    }
-    pid_t pid = NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
-    if (pid <= 0) {
-        result.failed = targetError;
-        return result;
-    }
-    result.pid = pid;
-    AXUIElementRef application = AXUIElementCreateApplication(pid);
-    result.application = CFBridgingRelease(application);
-    AXUIElementSetMessagingTimeout(application, 0.25);
-    if (!hasBoundFocus(result)) {
-        result.failed = focusError;
-        return result;
-    }
-
-    // Notification support varies. Keep every observer the provider supports
-    // and recheck the focused window and element even when it supports none.
-    AXObserverRef observer = NULL;
-    if (AXObserverCreate(pid, focusedChanged, &observer) == kAXErrorSuccess) {
-        result.observer = observer;
-        AXObserverAddNotification(observer, application, kAXFocusedUIElementChangedNotification, (__bridge void *)result);
-        AXObserverAddNotification(observer, application, kAXFocusedWindowChangedNotification, (__bridge void *)result);
-        if (result.window) {
-            AXObserverAddNotification(observer, (__bridge AXUIElementRef)result.window, kAXUIElementDestroyedNotification,
-                                      (__bridge void *)result);
-        }
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), kCFRunLoopCommonModes);
-    }
-    return result;
-}
-
-static NSString *checkTarget(Binding *binding) {
-    if (binding.failed) return binding.failed;
+static NSString *permissionFailure(void) {
     if (!AXIsProcessTrusted()) return permissionError;
-    if (!hasBoundFocus(binding)) return focusError;
-    if (IsSecureEventInputEnabled()) return secureInputError;
-    return fieldError((__bridge AXUIElementRef)binding.area);
-}
-
-static NSString *check(Binding *binding) {
-    NSString *error = checkTarget(binding);
-    if (error) return error;
     return CGPreflightPostEventAccess() ? nil : keyboardPermissionError;
 }
 
@@ -237,21 +140,6 @@ static BOOL releaseRequested(void) {
     @synchronized (releaseRequests) {
         return inputClosed || (token && [releaseRequests containsObject:token]);
     }
-}
-
-static NSString *checkDispatchFocus(Binding *binding) {
-    id checkedArea = binding.area;
-    // Focus can move within the same application during the preceding AX lookups.
-    if (!hasBoundFocus(binding)) return focusError;
-    if (!checkedArea && binding.area) {
-        NSString *error = fieldError((__bridge AXUIElementRef)binding.area);
-        if (error) return error;
-        if (!hasBoundFocus(binding)) return focusError;
-    }
-    if (!AXIsProcessTrusted()) return permissionError;
-    if (IsSecureEventInputEnabled()) return secureInputError;
-    if (releaseRequested() || NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier != binding.pid) return focusError;
-    return binding.failed;
 }
 
 static BOOL pasteKey(CGKeyCode *key) {
@@ -308,7 +196,13 @@ static NSString *restoreClipboard(NSPasteboard *board, NSInteger generation, NSA
     return restoreError;
 }
 
-static void pasteText(Binding *binding) {
+static void pasteText(void) {
+    NSString *error = permissionFailure();
+    if (error || IsSecureEventInputEnabled() || foregroundPID() <= 0) {
+        finishWrite(error);
+        return;
+    }
+
     NSPasteboard *board = NSPasteboard.generalPasteboard;
     NSPasteboardItem *item = [NSPasteboardItem new];
     if (![item setString:pendingText forType:NSPasteboardTypeString]) {
@@ -320,7 +214,7 @@ static void pasteText(Binding *binding) {
     NSInteger original = board.changeCount;
     NSArray<NSPasteboardItem *> *snapshot = snapshotClipboard(board);
     if (releaseRequested()) {
-        finishWrite(focusError);
+        finishWrite(authorizationError);
         return;
     }
     if (!snapshot || board.changeCount != original) {
@@ -329,11 +223,12 @@ static void pasteText(Binding *binding) {
     }
 
     NSInteger generation = [board prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];
-    NSString *error = [board writeObjects:@[item]] ? nil : clipboardError;
-    if (!error) error = check(binding) ?: checkDispatchFocus(binding);
+    error = [board writeObjects:@[item]] ? nil : clipboardError;
+    pid_t pid = !error && !releaseRequested() ? pasteTarget() : 0;
+    if (!error) error = permissionFailure();
 
     CGEventRef down = NULL, up = NULL;
-    if (!error) {
+    if (!error && pid > 0 && !IsSecureEventInputEnabled()) {
         // Staging and Accessibility calls can outlast a keyboard layout change.
         CGKeyCode key;
         if (pasteKey(&key)) {
@@ -344,25 +239,28 @@ static void pasteText(Binding *binding) {
     }
     if (!error && board.changeCount != generation) error = clipboardChangedError;
 
-    BOOL posted = NO;
+    BOOL posted = NO, waitForModifiers = NO;
     @synchronized (releaseRequests) {
         // Linearize cancellation with posting the single key pair. The reader
         // can revoke while AX or clipboard calls are running outside this lock.
-        if (!error && (inputClosed || [releaseRequests containsObject:token])) error = focusError;
-        if (!error && !shortcutHeld()) {
-            CGEventSetFlags(down, kCGEventFlagMaskCommand);
-            CGEventSetFlags(up, kCGEventFlagMaskCommand);
-            CGEventPostToPid(binding.pid, down);
-            CGEventPostToPid(binding.pid, up);
-            posted = YES;
+        if (!error && (inputClosed || [releaseRequests containsObject:token])) error = authorizationError;
+        if (!error && down && up && !IsSecureEventInputEnabled() && foregroundPID() == pid) {
+            waitForModifiers = shortcutHeld();
+            if (!waitForModifiers) {
+                CGEventSetFlags(down, kCGEventFlagMaskCommand);
+                CGEventSetFlags(up, kCGEventFlagMaskCommand);
+                CGEventPost(kCGSessionEventTap, down);
+                CGEventPost(kCGSessionEventTap, up);
+                posted = YES;
+            }
         }
     }
     if (down) CFRelease(down);
     if (up) CFRelease(up);
     if (!posted) {
         NSString *cleanupError = restoreClipboard(board, generation, snapshot);
-        if (error || cleanupError) finishWrite(cleanupError ?: error);
-        else writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
+        if (!error && !cleanupError && waitForModifiers) writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
+        else finishWrite(cleanupError ?: error);
         return;
     }
 
@@ -374,7 +272,7 @@ static void pasteText(Binding *binding) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, pasteSettleTime), dispatch_get_main_queue(), ^{
         NSString *cleanupError = restoreClipboard(board, generation, snapshot);
         pasteInFlight = NO;
-        finishWrite(cleanupError ?: binding.failed);
+        finishWrite(cleanupError);
         @synchronized (releaseRequests) {
             if (inputClosed) exit(0);
         }
@@ -390,14 +288,7 @@ static void insertWhenReleased(void) {
         return;
     }
     if (now < writeAfter) return;
-    Binding *binding = bound;
-    NSString *error = check(binding);
-    if (error) {
-        finishWrite(error);
-        return;
-    }
-
-    pasteText(binding);
+    pasteText();
 }
 
 static NSDictionary<NSString *, NSNumber *> *keys(void) {
@@ -435,14 +326,7 @@ static NSString *setShortcut(NSString *value) {
     shortcut = value;
     held = NO;
     heldContext = nil;
-    candidate = nil;
     return nil;
-}
-
-static void snapshot(void) {
-    candidate = captureTarget();
-    nextSnapshot = @([nextSnapshot unsignedLongLongValue] + 1);
-    snapshotNumber = nextSnapshot;
 }
 
 static OSStatus shortcutEvent(EventHandlerCallRef call, EventRef event, void *context) {
@@ -457,13 +341,11 @@ static OSStatus shortcutEvent(EventHandlerCallRef call, EventRef event, void *co
         if (!held) {
             held = YES;
             heldContext = shortcutContext;
-            if (!shortcutSessionActive && !bound) snapshot();
         }
     } else if (held) {
         held = NO;
         writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
-        // The host owns session identity, including Live graphs without an AX binding.
-        emitMessage(@{@"shortcut": shortcut, @"release": snapshotNumber ?: @0, @"context": heldContext ?: @0});
+        emitMessage(@{@"shortcut": shortcut, @"context": heldContext ?: @0});
         heldContext = nil;
     }
     return noErr;
@@ -477,18 +359,10 @@ static void handle(NSDictionary *message) {
         respond(request, setShortcut(message[@"text"]));
     } else if ([action isEqualToString:@"shortcut-context"]) {
         shortcutContext = message[@"text"];
-        shortcutSessionActive = [id isKindOfClass:NSString.class];
         respond(request, nil);
-    } else if ([action isEqualToString:@"snapshot-tray"]) {
-        trayCandidate = !bound && !held ? captureTarget() : nil;
-        respond(request, nil);
-    } else if ([action isEqualToString:@"bind-shortcut"] || [action isEqualToString:@"bind-tray"]) {
-        BOOL fromShortcut = [action isEqualToString:@"bind-shortcut"];
-        Binding *start = fromShortcut ? candidate : trayCandidate;
-        if (fromShortcut) candidate = nil;
-        else trayCandidate = nil;
-        if (bound || pendingRequest || !start || (fromShortcut && ![message[@"text"] isEqual:snapshotNumber])) {
-            respond(request, focusError);
+    } else if ([action isEqualToString:@"authorize"]) {
+        if (token || pendingRequest || ![id isKindOfClass:NSString.class]) {
+            respond(request, authorizationError);
             return;
         }
         if (!AXIsProcessTrusted()) {
@@ -496,17 +370,13 @@ static void handle(NSDictionary *message) {
             respond(request, permissionError);
             return;
         }
-        NSString *error = check(start);
-        if (!error) {
-            bound = start;
-            token = id;
-        }
+        NSString *error = permissionFailure();
+        if (!error) token = id;
         respond(request, error);
     } else if ([action isEqualToString:@"release"]) {
         if ([id isEqual:token]) {
-            bound = nil;
             token = nil;
-            finishWrite(focusError);
+            finishWrite(authorizationError);
         }
         if ([id isKindOfClass:NSString.class]) {
             @synchronized (releaseRequests) {
@@ -520,7 +390,7 @@ static void handle(NSDictionary *message) {
         waitingForRelease = YES;
         insertWhenReleased();
     } else {
-        respond(request, focusError);
+        respond(request, authorizationError);
     }
 }
 
@@ -562,19 +432,14 @@ int main(void) {
             { kEventClassKeyboard, kEventHotKeyPressed }, { kEventClassKeyboard, kEventHotKeyReleased },
         };
         if (InstallApplicationEventHandler(shortcutEvent, 2, events, NULL, NULL) != noErr) return 1;
-        [NSWorkspace.sharedWorkspace.notificationCenter
-            addObserverForName:NSWorkspaceDidActivateApplicationNotification object:nil queue:NSOperationQueue.mainQueue
-            usingBlock:^(NSNotification *note) {
-                pid_t pid = [note.userInfo[NSWorkspaceApplicationKey] processIdentifier];
-                if (candidate && pid != candidate.pid) invalidate(candidate, focusError);
-                if (trayCandidate && pid != trayCandidate.pid) invalidate(trayCandidate, focusError);
-                if (bound && pid != bound.pid) invalidate(bound, focusError);
-            }];
-
         dispatch_source_t poll = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
         dispatch_source_set_timer(poll, dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), 50 * NSEC_PER_MSEC, 5 * NSEC_PER_MSEC);
         dispatch_source_set_event_handler(poll, ^{
-            if (bound && !bound.failed && !AXIsProcessTrusted()) invalidate(bound, permissionError);
+            if (token && !AXIsProcessTrusted()) {
+                emitMessage(@{@"failed": token, @"error": permissionError});
+                token = nil;
+                finishWrite(permissionError);
+            }
             insertWhenReleased();
         });
         dispatch_resume(poll);

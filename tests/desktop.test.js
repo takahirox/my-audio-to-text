@@ -115,7 +115,7 @@ test('Stop drains and blocks new starts, then rejects the old runtime token', as
   await controller.cancel();
 });
 
-test('target invalidation discards queued output and cannot overlap cleanup with a new session', async () => {
+test('fatal helper failure discards queued output and cannot overlap cleanup with a new session', async () => {
   let complete, id;
   const writes = [];
   const controller = new DesktopSession({
@@ -132,7 +132,7 @@ test('target invalidation discards queued output and cannot overlap cleanup with
   const first = controller.insert(id, 'in flight');
   const second = controller.insert(id, 'pending');
   await tick();
-  const canceled = controller.cancel('Focus changed', id);
+  const canceled = controller.cancel('Accessibility service stopped', id);
   await assert.rejects(controller.insert(id, 'stale'), /no longer authorized/);
   await controller.start(plan());
   assert.equal(controller.state.phase, 'canceling');
@@ -140,16 +140,16 @@ test('target invalidation discards queued output and cannot overlap cleanup with
   await first;
   await assert.rejects(second, /no longer authorized/);
   await canceled;
-  assert.equal(controller.state.error, 'Focus changed');
+  assert.equal(controller.state.error, 'Accessibility service stopped');
   assert.deepEqual(writes, ['in flight']);
 });
 
-test('bind failure and microphone denial fail visibly, then a new Start succeeds', async () => {
+test('authorization and microphone denial fail visibly, then a new Start succeeds', async () => {
   let starts = 0, releases = 0, cancels = 0;
-  let failBind = true;
+  let failAuthorization = true;
   const controller = new DesktopSession({
     target: { request: async action => {
-      if (action === 'bind-shortcut' && failBind) throw Error('Protected field');
+      if (action === 'authorize' && failAuthorization) throw Error('Accessibility permission denied');
       if (action === 'release') releases++;
     } },
     run: async action => {
@@ -159,10 +159,10 @@ test('bind failure and microphone denial fail visibly, then a new Start succeeds
     onChange() {}, onDisplay() {},
   });
   await controller.start(plan());
-  assert.equal(controller.state.error, 'Protected field');
+  assert.equal(controller.state.error, 'Accessibility permission denied');
   assert.equal(starts, 0);
   assert.equal(cancels, 0);
-  failBind = false;
+  failAuthorization = false;
   await controller.start(plan());
   assert.equal(controller.state.error, 'Microphone permission denied');
   assert.equal(controller.state.microphone, false);

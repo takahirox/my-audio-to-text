@@ -1,4 +1,4 @@
-// The main process owns target authorization from Start through the final drain.
+// The main process authorizes committed output from Start through the final drain.
 export class DesktopSession {
   constructor({ target, run, onChange, onDisplay }) {
     Object.assign(this, { target, run, onChange, onDisplay });
@@ -10,13 +10,13 @@ export class DesktopSession {
     this.onChange(this.state);
   }
 
-  async start(plan, binding = 'bind-shortcut') {
+  async start(plan) {
     if (this.current) return;
     const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map() };
     this.current = session;
     this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays });
     try {
-      if (plan.focused) await this.target.request(binding, session.id);
+      if (plan.focused) await this.target.request('authorize', session.id);
       if (this.current !== session || this.state.phase !== 'preparing') return;
       session.admitted = true;
       await this.run('start', session.id, plan.graph);
@@ -80,12 +80,12 @@ export class DesktopSession {
   insert(id, text) {
     const session = this.current;
     const allowed = () => session && this.current === session && session.admitted && session.id === id && session.plan.focused;
-    if (!allowed()) return Promise.reject(Error('The voice typing target is no longer authorized.'));
+    if (!allowed()) return Promise.reject(Error('The voice typing session is no longer authorized.'));
     if (typeof text !== 'string' || text.length > 32768 || text.includes('\0') || !text.isWellFormed()) {
       return Promise.reject(Error('Focused output requires well-formed TEXT of up to 32,768 characters.'));
     }
     const pending = session.queue.then(() => {
-      if (!allowed()) throw Error('The voice typing target is no longer authorized.');
+      if (!allowed()) throw Error('The voice typing session is no longer authorized.');
       if (text) return this.target.request('insert', id, text);
     });
     session.queue = pending.catch(error => { void this.cancel(error.message, id); });

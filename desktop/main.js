@@ -102,13 +102,13 @@ function showManagement(page) {
   management.focus();
 }
 
-function start(id, mode, binding) {
+function start(id, mode) {
   if (controller.current || quitting) return;
   try {
     const plan = planGraph(library.lookup(id).graph, mode);
     if (modelOperation === 'modelDelete') throw Error('Wait for model deletion to finish, then start again.');
     displayItems.clear();
-    return controller.start(plan, binding);
+    return controller.start(plan);
   } catch (error) { controller.update({ error: error.message }); }
 }
 
@@ -120,16 +120,15 @@ function trayToggle() {
     setTimeout(() => { if (controller.current === session) toggle(); }, 90);
   } else {
     // Let GTK finish dismissing the menu before publish rebuilds it.
-    // The helper already owns the pre-menu focus snapshot.
     const id = library.value.selected;
-    setImmediate(() => { void start(id, 'dictation', 'bind-tray'); });
+    setImmediate(() => { void start(id, 'dictation'); });
   }
 }
 
 function updateSession() {
   const id = controller.current?.id;
-  if (mac && !quitting && id !== shortcutSession) {
-    // Distinguish each session and idle period, even when no text target is bound.
+  if (!quitting && id !== shortcutSession) {
+    // A held shortcut belongs to the session or idle period where it began.
     shortcutSession = id;
     void target.request('shortcut-context', id ?? null, ++shortcutContext).catch(() => {});
   }
@@ -137,9 +136,9 @@ function updateSession() {
 }
 
 function shortcutReleased(value, context) {
-  if (quitting || value !== registeredShortcut || (mac && context !== shortcutContext)) return;
+  if (quitting || value !== registeredShortcut || context !== shortcutContext) return;
   if (!controller.current) {
-    void start(library.value.selected, 'dictation', 'bind-shortcut');
+    void start(library.value.selected, 'dictation');
   } else {
     // The helper waits for focus to settle before applying any final TEXT.
     toggle();
@@ -153,7 +152,7 @@ async function registerShortcut(value, save = false) {
       || new Set(modifiers).size !== modifiers.length || !modifiers.some(key => key !== 'Shift')) {
     throw Error('Use at least two distinct modifiers (Control, Alt, Shift, Super) and a letter, digit, or F1–F12.');
   }
-  if (mac) await target.request('shortcut-context', shortcutSession ?? null, shortcutContext);
+  await target.request('shortcut-context', shortcutSession ?? null, shortcutContext);
   await target.request('set-shortcut', null, value);
   try { if (save) library.shortcut(value); }
   catch (error) {
@@ -377,7 +376,7 @@ else {
     const helper = mac ? [join(dirname(process.execPath), 'focused-text'), []]
       : ['/usr/bin/python3', ['-u', join(import.meta.dirname, 'x11-accessibility.py')]];
     target = new FocusedTarget(...helper, {
-      onInvalid: (id, error) => { void controller.cancel(error, id); },
+      onFailure: (id, error) => { void controller.cancel(error, id); },
       onShortcut: shortcutReleased,
       onLost: () => {
         if (!registeredShortcut || quitting) return;
@@ -402,8 +401,7 @@ else {
     await management.loadURL(appURL('management'));
     tray = new Tray(icon);
     if (mac) {
-      tray.on('mouse-down', async () => {
-        if (!controller.current) await target.request('snapshot-tray').catch(() => {});
+      tray.on('mouse-down', () => {
         if (!quitting) tray.popUpContextMenu(trayMenu);
       });
     }
