@@ -49,7 +49,8 @@ static BOOL hasSameTextAndSelection(AXUIElementRef element, NSString *value, CFR
 static EditMethod editMethod(AXUIElementRef field, AXUIElementRef window) {
     if (!field || !window) return Unavailable;
     id role = attribute(field, kAXRoleAttribute);
-    if (![role isEqual:@"AXTextArea"] && ![role isEqual:@"AXTextField"]) return Unavailable;
+    BOOL comboBox = [role isEqual:@"AXComboBox"];
+    if (!comboBox && ![role isEqual:@"AXTextArea"] && ![role isEqual:@"AXTextField"]) return Unavailable;
     CFTypeRef subrole = NULL;
     AXError status = AXUIElementCopyAttributeValue(field, kAXSubroleAttribute, &subrole);
     id fieldSubrole = CFBridgingRelease(subrole);
@@ -76,6 +77,8 @@ static EditMethod editMethod(AXUIElementRef field, AXUIElementRef window) {
         }
     }
     if (writable(field, kAXSelectedTextAttribute)) return SelectedText;
+    // A selection-only combo box can expose a writable value without accepting text.
+    if (comboBox && ![editable isEqual:@YES]) return Unavailable;
     return NativeInput;
 }
 

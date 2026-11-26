@@ -443,6 +443,29 @@ test('macOS rejects settable selected text in a read-only field at bind and disp
   assert.deepEqual(await configure(), { text: 'left|right', other: 'other', writes: 0, focused: 0 });
 });
 
+test('macOS replaces the selection in an editable combo box and refuses a read-only one', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'selected text');
+  const field = { comboBox: true, singleLine: true, selectionLength: 2 };
+  await configure({ ...field, readOnly: true });
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /exposes Accessibility editing/);
+  assert.equal((await configure(field)).writes, 0);
+
+  const id = await start();
+  assert.ok(id);
+  await controller.insert(id, '東京🙂');
+  await controller.stop();
+  assert.deepEqual(await configure(), { text: 'left|東京🙂ght', other: 'other', writes: 1, focused: 0 });
+});
+
+test('macOS refuses a combo box with a writable value but no text editing capability', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'keyboard');
+  await configure({ comboBox: true });
+  assert.equal(await start(), undefined);
+  assert.match(controller.state.error, /exposes Accessibility editing/);
+  assert.equal((await configure()).writes, 0);
+});
+
 test('macOS equivalent editable fields accept the same selected-text edit in unrelated apps', async t => {
   const fixtures = await Promise.all([dispatchFixture(t, 'selected text'), dispatchFixture(t, 'selected text', true)]);
   for (const { controller, configure, start } of fixtures) {
