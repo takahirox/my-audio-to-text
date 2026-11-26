@@ -114,7 +114,8 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
             });
         }
         emitMessage(@{@"focusReadPaused": @YES});
-        assert(dispatch_semaphore_wait(resumeFocus, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
+        assert(dispatch_semaphore_wait(resumeFocus,
+            dispatch_time(DISPATCH_TIME_NOW, focusStallMs * NSEC_PER_MSEC + 5 * NSEC_PER_SEC)) == 0);
     }
     return kAXErrorSuccess;
 }

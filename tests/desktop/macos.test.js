@@ -259,7 +259,7 @@ function dispatchFixture(t, tool) {
   };
   // The stdin reader signals the blocked AX call without waiting for main.
   const resumeFocus = () => target.connect().process.stdin.write('{"action":"resume-focus"}\n');
-  return { controller, configure, dispatched, start, resumeFocus, waiting: () => waiting, focusReadPaused: () => focusReadPaused };
+  return { target, controller, configure, dispatched, start, resumeFocus, waiting: () => waiting, focusReadPaused: () => focusReadPaused };
 }
 
 test('macOS clipboard paste', async t => {
@@ -400,6 +400,31 @@ test('macOS clipboard paste', async t => {
     const state = await configure({ advance: 1000 });
     assert.equal(state.keyDowns, 0);
     assert.deepEqual(state.clipboard, originalClipboard);
+  });
+
+  await t.test('Cancel restores staged data without pasting when focus outlasts the request timeout', {
+    timeout: 15000,
+  }, async t => {
+    const { target, controller, configure, start, focusReadPaused } = dispatchFixture(t, tool);
+    const child = target.connect().process;
+    const closed = once(child, 'close');
+    t.after(() => { child.kill(); });
+    const quitReport = join(await temp(t, 'desktop-macos-cancel-'), 'result.json');
+    await configure({ pauseAfterStage: true, focusStallMs: 8000, quitReport });
+    const id = await start();
+    assert.ok(id);
+    const first = assert.rejects(controller.insert(id, 'staged during Cancel'), /did not respond/);
+    const second = assert.rejects(controller.insert(id, 'queued during Cancel'), /no longer authorized/);
+    await eventually(focusReadPaused, 'The helper did not stall after staging');
+    await Promise.all([first, second, controller.cancel()]);
+
+    assert.match(controller.state.error, /did not respond/);
+    assert.deepEqual(await closed, [0, null], 'The helper must be allowed to finish clipboard cleanup');
+    const state = JSON.parse(await readFile(quitReport, 'utf8'));
+    assert.deepEqual(state.clipboard, originalClipboard);
+    assert.deepEqual(state.reads, []);
+    assert.equal(state.keyDowns, 0);
+    assert.equal(state.keyUps, 0);
   });
 
   await t.test('Cancel after dispatch lets the editor read before restoring and drops queued text', async t => {
