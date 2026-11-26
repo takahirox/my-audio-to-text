@@ -101,6 +101,25 @@ class InsertTest(unittest.TestCase):
         self.request("insert", text="E")
         self.assertEqual(blocked.text, "AE")
 
+    def test_lost_insert_reply_preserves_chunk_order(self):
+        original_insert = self.field.insert_text
+
+        def lose_reply(offset, text, length):
+            original_insert(offset, text, length)
+            raise helper["GLib"].Error("Lost reply after insertion")
+
+        self.field.insert_text = Mock(side_effect=lose_reply)
+        self.request("insert", text="A")
+        self.assertEqual((self.field.text, self.field.offset), ("A", 0))
+        self.request("insert", text="B")
+        self.field.insert_text.assert_called_once_with(0, "A", 1)
+        self.assertEqual(self.field.text, "A")
+
+        self.field.insert_text = original_insert
+        self.field.offset = 1
+        self.request("insert", text="C")
+        self.assertEqual((self.field.text, self.field.offset), ("AC", 2))
+
 
 if __name__ == "__main__":
     unittest.main()
