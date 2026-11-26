@@ -23,14 +23,24 @@ class AuthorizationError(Exception):
 
 AUTHORIZATION_ERROR = "The voice typing session is no longer authorized."
 FOCUS_SETTLE_MS = 75
+ATSPI_CALL_TIMEOUT_MS = 500
+DELIVERY_BUDGET_SECONDS = 2.5
 
 
 def send(value):
     print(json.dumps(value), flush=True)
 
 
-def children(node):
-    return (node.get_child_at_index(index) for index in range(node.get_child_count()))
+def check_delivery_time(deadline):
+    if time.monotonic() >= deadline:
+        raise TargetError()
+
+
+def children(node, deadline):
+    check_delivery_time(deadline)
+    for index in range(node.get_child_count()):
+        check_delivery_time(deadline)
+        yield node.get_child_at_index(index)
 
 
 class Focus:
@@ -100,11 +110,11 @@ class Focus:
                     raise TargetError()
         return offset, count
 
-    def locate(self, window):
+    def locate(self, window, deadline):
         frames = []
-        for app in children(Atspi.get_desktop(0)):
+        for app in children(Atspi.get_desktop(0), deadline):
             if app is not None and app.get_process_id() == window[1]:
-                frames.extend(frame for frame in children(app) if frame is not None
+                frames.extend(frame for frame in children(app, deadline) if frame is not None
                               and frame.get_state_set().contains(Atspi.StateType.ACTIVE))
         if len(frames) != 1:
             raise TargetError()
@@ -115,6 +125,7 @@ class Focus:
         for _ in range(4096):
             if not pending:
                 break
+            check_delivery_time(deadline)
             node = pending.pop()
             states = node.get_state_set()
             if states.contains(Atspi.StateType.FOCUSED):
@@ -124,7 +135,7 @@ class Focus:
                 focused = node
                 continue
             if states.contains(Atspi.StateType.SHOWING):
-                pending.extend(child for child in reversed(list(children(node))) if child is not None)
+                pending.extend(child for child in reversed(list(children(node, deadline))) if child is not None)
         if focused is None or pending or self.window() != window:
             raise TargetError()
         return frames[0], focused
@@ -178,35 +189,54 @@ class Focus:
             raise AuthorizationError()
 
     def insert(self, token, text):
+        # Bound discovery and dispatch separately from any wait for the shortcut.
+        deadline = time.monotonic() + DELIVERY_BUDGET_SECONDS
         window = self.window()
-        frame, node = self.locate(window)
+        frame, node = self.locate(window, deadline)
+        check_delivery_time(deadline)
         offset, before = self.caret(node)
-        if self.unadvanced_carets.get(node) == offset:
-            raise TargetError()
+        guard = self.unadvanced_carets.get(node)
+        if guard is not None:
+            guarded_offset, original_count = guard
+            # With no selection, an insert grows the text. A fresh count that
+            # matches the original can clear an unconfirmed insert.
+            if offset == guarded_offset and (original_count is None or before != original_count):
+                raise TargetError()
+        check_delivery_time(deadline)
         if self.caret(node) != (offset, before):
             raise TargetError()
         self.x_event()
         if self.focus_is_settling():
             return False
         # Synchronous caret queries can run while the user changes focus.
+        check_delivery_time(deadline)
         self.verify(window, frame, node)
         length = len(text.encode("utf-8"))
+        check_delivery_time(deadline)
         self.require_authorization(token)
         # A lost reply can leave an applied edit at the original caret.
         # Guard that offset before dispatching so later chunks cannot overtake it.
-        self.unadvanced_carets[node] = offset
+        self.unadvanced_carets[node] = (offset, before)
         if not node.insert_text(offset, text, length):
             del self.unadvanced_carets[node]
             return True
 
+        check_delivery_time(deadline)
         inserted = node.get_character_count() - before
-        if inserted <= 0 or node.get_caret_offset() != offset:
+        if inserted == 0:
             del self.unadvanced_carets[node]
-        elif not node.get_n_selections():
-            self.verify(window, frame, node)
-            self.require_authorization(token)
-            if node.set_caret_offset(offset + inserted):
+        elif inserted > 0:
+            # Once growth is observed, keep guarding this caret until it moves.
+            self.unadvanced_carets[node] = (offset, None)
+            if node.get_caret_offset() != offset:
                 del self.unadvanced_carets[node]
+            elif not node.get_n_selections():
+                check_delivery_time(deadline)
+                self.verify(window, frame, node)
+                check_delivery_time(deadline)
+                self.require_authorization(token)
+                if node.set_caret_offset(offset + inserted):
+                    del self.unadvanced_carets[node]
         return True
 
     def x_event(self, *_args):
@@ -287,6 +317,9 @@ class Focus:
 
 
 if __name__ == "__main__":
+    # Disable AT-SPI's application startup grace period so a stalled target
+    # replies with a recoverable error within the host's helper deadline.
+    Atspi.set_timeout(ATSPI_CALL_TIMEOUT_MS, 0)
     Atspi.init()
     focus = Focus()
     GLib.io_add_watch(focus.x.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN, focus.x_event)

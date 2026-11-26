@@ -29,7 +29,7 @@ with os.fdopen(read_fd) as stdin, os.fdopen(write_fd, "wb", buffering=0) as requ
         message = {"request": number, "action": action, "token": "dictation", **fields}
         requests.write(json.dumps(message).encode() + b"\n")
 
-    def locate(_window):
+    def locate(_window, _deadline):
         request(3, "release")
         return None, target
 
