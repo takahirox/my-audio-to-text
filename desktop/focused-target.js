@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
+const timeoutError = 'The accessibility service did not respond. Voice typing stopped.';
+
 export class FocusedTarget {
   constructor(command, args, { onInvalid, onShortcut, onLost }) {
     Object.assign(this, { command, args, onInvalid, onShortcut, onLost });
@@ -35,11 +37,12 @@ export class FocusedTarget {
   request(action, token, text) {
     if (action === 'release' && (!this.worker || this.closing)) return Promise.resolve();
     if (this.closing) return Promise.reject(Error('Accessibility session closed.'));
+    if (this.draining) return Promise.reject(Error(timeoutError));
     const worker = this.connect();
     const request = ++this.sequence;
     if (action === 'bind-shortcut' || action === 'bind-tray') worker.token = token;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => this.disconnect(worker, 'The accessibility service did not respond. Voice typing stopped.'), 7000);
+      const timer = setTimeout(() => this.disconnect(worker, timeoutError, process.platform === 'darwin'), 7000);
       this.pending.set(request, ({ error, waiting }) => {
         if (waiting) {
           timer.refresh();
@@ -56,10 +59,11 @@ export class FocusedTarget {
     });
   }
 
-  disconnect(worker, error) {
+  disconnect(worker, error, graceful = false) {
     if (this.worker !== worker) return;
     this.worker = null;
-    if (!this.closing) worker.process.kill();
+    if (graceful) this.drain(worker);
+    else if (!this.closing) worker.process.kill();
     for (const complete of this.pending.values()) complete({ error });
     if (worker.token) this.onInvalid(worker.token, error);
     this.onLost(error);
@@ -71,12 +75,18 @@ export class FocusedTarget {
 
   async closeGracefully() {
     this.closing = true;
-    const child = this.worker?.process;
-    if (!child) return;
-    // EOF revokes dispatch on the native reader thread. The helper exits
-    // after cleanup, even if the renderer or a request has timed out.
-    const closed = new Promise(resolve => child.once('close', resolve));
-    child.stdin.end();
-    await closed;
+    await (this.worker ? this.drain(this.worker) : this.draining);
+  }
+
+  drain(worker) {
+    if (!this.draining) {
+      // EOF revokes dispatch on the native reader thread. Wait for cleanup
+      // before allowing a replacement helper to start a clipboard transaction.
+      const child = worker.process;
+      this.draining = new Promise(resolve => child.once('close', resolve))
+        .finally(() => { this.draining = null; });
+      child.stdin.end();
+    }
+    return this.draining;
   }
 }
