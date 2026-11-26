@@ -15,8 +15,9 @@ static BOOL trusted = YES, canPost = YES;
 static BOOL secureInput, protectedField, disabledField, readOnly, notEditable;
 static BOOL modifiers, sameWindow, noWindow, noField, systemField, noRole;
 static BOOL failSnapshot, failStage, failRestore, switchAfterStage, copyAfterStage, pauseAfterStage;
-static BOOL switchDuringProtection;
+static BOOL switchDuringProtection, switchLayoutAfterStage;
 static BOOL currentHostOnly;
+static CGKeyCode layoutPasteKey = kVK_ANSI_Period;
 static dispatch_semaphore_t resumeFocus;
 static int64_t focusStallMs;
 static NSString *quitReport;
@@ -24,6 +25,7 @@ static dispatch_block_t consumePaste, settlePaste;
 static uint64_t timeMs, consumeAt, settleAt;
 static const uint64_t targetReadDelayMs = 150;
 static NSMutableArray<NSString *> *reads;
+static NSMutableArray<NSNumber *> *keyCodes;
 static void emitMessage(NSDictionary *message);
 
 @interface FixtureWorkspace : NSObject
@@ -72,6 +74,7 @@ static void copyText(NSString *text) {
     if (staging ? failStage : failRestore) return NO;
     BOOL wrote = [clipboard writeObjects:objects];
     if (staging && switchAfterStage) focused = 1;
+    if (staging && switchLayoutAfterStage) layoutPasteKey = kVK_ANSI_V;
     if (staging && copyAfterStage) copyText(@"copied before dispatch");
     return wrote;
 }
@@ -135,7 +138,7 @@ static AXError getPid(AXUIElementRef element, pid_t *pid) {
 }
 
 static TISInputSourceRef fixtureInputSource(void) {
-    return (TISInputSourceRef)CFBridgingRetain([NSData dataWithBytes:"x" length:1]);
+    return (TISInputSourceRef)CFBridgingRetain([NSData dataWithBytes:&layoutPasteKey length:sizeof(layoutPasteKey)]);
 }
 
 static const void *layoutProperty(TISInputSourceRef source, CFStringRef property) {
@@ -146,10 +149,11 @@ static const void *layoutProperty(TISInputSourceRef source, CFStringRef property
 static OSStatus translateKey(const UCKeyboardLayout *layout, UInt16 key, UInt16 action, UInt32 modifiers,
                              UInt32 keyboardType, OptionBits options, UInt32 *dead,
                              UniCharCount maximum, UniCharCount *length, UniChar *result) {
-    (void)layout; (void)keyboardType; (void)options; (void)dead; (void)maximum;
+    (void)keyboardType; (void)options; (void)dead; (void)maximum;
     assert(action == kUCKeyActionDisplay && modifiers == cmdKey >> 8);
-    // Require the current layout's V even when it differs from ANSI V.
-    *length = key == kVK_ANSI_Period;
+    CGKeyCode pasteKey;
+    memcpy(&pasteKey, layout, sizeof(pasteKey));
+    *length = key == pasteKey;
     result[0] = 'v';
     return noErr;
 }
@@ -157,7 +161,7 @@ static OSStatus translateKey(const UCKeyboardLayout *layout, UInt16 key, UInt16 
 static void postKey(pid_t pid, CGEventRef event) {
     assert(pid == frontPid && trusted && canPost && !secureInput && !protectedField &&
            !disabledField && !readOnly && !notEditable && !modifiers);
-    assert(CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == kVK_ANSI_Period);
+    [keyCodes addObject:@(CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode))];
     assert(CGEventGetFlags(event) == kCGEventFlagMaskCommand);
     if (CGEventGetType(event) == kCGEventKeyUp) {
         assert(keyUps + 1 == keyDowns);
@@ -241,7 +245,7 @@ static NSDictionary *fixtureState(void) {
         [items addObject:formats];
     }
     return @{@"text": editors[0].string, @"other": editors[1].string, @"reads": reads,
-             @"keyDowns": @(keyDowns), @"keyUps": @(keyUps), @"clipboard": items,
+             @"keyDowns": @(keyDowns), @"keyUps": @(keyUps), @"keyCodes": keyCodes, @"clipboard": items,
              @"currentHostOnly": @(currentHostOnly)};
 }
 
@@ -279,6 +283,7 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"failRestore"]) failRestore = [options[@"failRestore"] boolValue];
     if (options[@"switchAfterStage"]) switchAfterStage = [options[@"switchAfterStage"] boolValue];
     if (options[@"switchDuringProtection"]) switchDuringProtection = [options[@"switchDuringProtection"] boolValue];
+    if (options[@"switchLayoutAfterStage"]) switchLayoutAfterStage = [options[@"switchLayoutAfterStage"] boolValue];
     if (options[@"copyAfterStage"]) copyAfterStage = [options[@"copyAfterStage"] boolValue];
     if (options[@"pauseAfterStage"]) pauseAfterStage = [options[@"pauseAfterStage"] boolValue];
     if (options[@"focusStallMs"]) focusStallMs = [options[@"focusStallMs"] longLongValue];
@@ -316,6 +321,7 @@ int main(void) {
         [FixturePasteboard.generalPasteboard prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];
         assert(([clipboard writeObjects:@[first, second]]));
         reads = [NSMutableArray array];
+        keyCodes = [NSMutableArray array];
         resumeFocus = dispatch_semaphore_create(0);
         assert(atexit(reportQuit) == 0);
         readRequests(^(NSDictionary *message) {

@@ -308,7 +308,7 @@ static NSString *restoreClipboard(NSPasteboard *board, NSInteger generation, NSA
     return restoreError;
 }
 
-static void pasteText(Binding *binding, CGEventRef down, CGEventRef up) {
+static void pasteText(Binding *binding) {
     NSPasteboard *board = NSPasteboard.generalPasteboard;
     NSPasteboardItem *item = [NSPasteboardItem new];
     if (![item setString:pendingText forType:NSPasteboardTypeString]) {
@@ -331,6 +331,17 @@ static void pasteText(Binding *binding, CGEventRef down, CGEventRef up) {
     NSInteger generation = [board prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];
     NSString *error = [board writeObjects:@[item]] ? nil : clipboardError;
     if (!error) error = check(binding) ?: checkDispatchFocus(binding);
+
+    CGEventRef down = NULL, up = NULL;
+    if (!error) {
+        // Staging and Accessibility calls can outlast a keyboard layout change.
+        CGKeyCode key;
+        if (pasteKey(&key)) {
+            down = CGEventCreateKeyboardEvent(NULL, key, true);
+            up = CGEventCreateKeyboardEvent(NULL, key, false);
+        }
+        if (!down || !up) error = keyboardError;
+    }
     if (!error && board.changeCount != generation) error = clipboardChangedError;
 
     BOOL posted = NO;
@@ -339,11 +350,15 @@ static void pasteText(Binding *binding, CGEventRef down, CGEventRef up) {
         // can revoke while AX or clipboard calls are running outside this lock.
         if (!error && (inputClosed || [releaseRequests containsObject:token])) error = focusError;
         if (!error && !shortcutHeld()) {
+            CGEventSetFlags(down, kCGEventFlagMaskCommand);
+            CGEventSetFlags(up, kCGEventFlagMaskCommand);
             CGEventPostToPid(binding.pid, down);
             CGEventPostToPid(binding.pid, up);
             posted = YES;
         }
     }
+    if (down) CFRelease(down);
+    if (up) CFRelease(up);
     if (!posted) {
         NSString *cleanupError = restoreClipboard(board, generation, snapshot);
         if (error || cleanupError) finishWrite(cleanupError ?: error);
@@ -382,20 +397,7 @@ static void insertWhenReleased(void) {
         return;
     }
 
-    CGKeyCode key;
-    if (!pasteKey(&key)) {
-        finishWrite(keyboardError);
-        return;
-    }
-    CGEventRef down = CGEventCreateKeyboardEvent(NULL, key, true);
-    CGEventRef up = CGEventCreateKeyboardEvent(NULL, key, false);
-    if (down && up) {
-        CGEventSetFlags(down, kCGEventFlagMaskCommand);
-        CGEventSetFlags(up, kCGEventFlagMaskCommand);
-        pasteText(binding, down, up);
-    } else finishWrite(keyboardError);
-    if (down) CFRelease(down);
-    if (up) CFRelease(up);
+    pasteText(binding);
 }
 
 static NSDictionary<NSString *, NSNumber *> *keys(void) {
