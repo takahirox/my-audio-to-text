@@ -369,6 +369,22 @@ test('macOS range replacement refuses a stale replacement range after a same-fie
   });
 });
 
+test('macOS range replacement refuses text or selection changes during dispatch protection checks', async t => {
+  const { controller, configure, start } = await dispatchFixture(t, 'range');
+  for (const [change, text] of [
+    ['moveCaretOnFinalSubrole', 'left|right'],
+    ['changeValueOnFinalSubrole', 'new left|right'],
+  ]) {
+    const id = await start();
+    assert.ok(id);
+    await configure({ selectionLength: 2, [change]: true });
+
+    await assert.rejects(controller.insert(id, '東京🙂'), /text or selection changed/, change);
+    await controller.cancel();
+    assert.deepEqual(await configure(), { text, other: 'other', writes: 0, focused: 0, chunks: [] });
+  }
+});
+
 test('macOS range replacement discards cancelled deliveries and accepts a native no-op', async t => {
   const { controller, configure, start, waiting } = await dispatchFixture(t, 'range');
   await configure({ held: true });

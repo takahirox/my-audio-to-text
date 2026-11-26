@@ -279,14 +279,12 @@ static BOOL releaseRequested(void) {
     }
 }
 
-static NSString *dispatchError(Binding *binding) {
-    NSString *error = checkTarget(binding);
-    if (error) return error;
+static NSString *checkDispatchFocus(Binding *binding) {
     id checkedArea = binding.area;
-    // Focus can move within the same application during the protection lookups.
+    // Focus can move within the same application during the preceding AX lookups.
     if (!hasBoundFocus(binding)) return focusError;
     if (!checkedArea && binding.area) {
-        error = fieldError((__bridge AXUIElementRef)binding.area);
+        NSString *error = fieldError((__bridge AXUIElementRef)binding.area);
         if (error) return error;
         if (!hasBoundFocus(binding)) return focusError;
     }
@@ -346,7 +344,7 @@ static void postText(Binding *binding) {
     CGEventSetFlags(up, 0);
     CGEventKeyboardSetUnicodeString(down, length, buffer);
     CGEventKeyboardSetUnicodeString(up, length, buffer);
-    NSString *error = dispatchError(binding);
+    NSString *error = checkTarget(binding) ?: checkDispatchFocus(binding);
     if (!error && !CGPreflightPostEventAccess()) error = keyboardPermissionError;
     BOOL modifiersHeld = shortcutHeld();
     if (!error && !modifiersHeld) {
@@ -422,7 +420,12 @@ static void insertWhenReleased(void) {
         postText(binding);
         return;
     }
-    // Explicit ranges remain valid only while the value and selection match.
+    error = checkTarget(binding);
+    if (error) {
+        finishWrite(error);
+        return;
+    }
+    // Revalidate explicit ranges after the dispatch-time protection lookups.
     if (replacement) {
         id currentValue = attribute(area, kAXValueAttribute);
         CFRange currentSelection;
@@ -435,7 +438,7 @@ static void insertWhenReleased(void) {
             return;
         }
     }
-    error = dispatchError(binding);
+    error = checkDispatchFocus(binding);
     if (error) {
         finishWrite(error);
         return;

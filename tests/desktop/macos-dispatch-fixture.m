@@ -71,6 +71,8 @@ static NSUInteger selectionReads;
 static NSUInteger focused;
 static BOOL sameWindow;
 static BOOL switchOnFinalSubrole;
+static BOOL moveCaretOnFinalSubrole;
+static BOOL changeValueOnFinalSubrole;
 static NSUInteger subroleReads;
 static BOOL switchOnSecondSelection;
 static BOOL readOnlyOnSecondSelection;
@@ -101,8 +103,12 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
         else result = singleLine ? @"AXTextField" : @"AXTextArea";
     }
     else if ([key isEqual:@"AXSubrole"]) {
-        // The second protection check during a keyboard delivery runs just before dispatch.
-        if (switchOnFinalSubrole && ++subroleReads == 2) focused = 1;
+        // Direct edits check protection twice before the dispatch-time lookup.
+        if (++subroleReads == (keyboardOnly ? 2 : 3)) {
+            if (switchOnFinalSubrole) focused = 1;
+            if (moveCaretOnFinalSubrole) selection = CFRangeMake(2, 0);
+            if (changeValueOnFinalSubrole) documents[0] = @"new left|right";
+        }
         if (protectedField) result = @"AXSecureTextField";
     }
     else if ([key isEqual:@"AXEnabled"]) result = @(!disabledField);
@@ -309,6 +315,8 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
     sameWindow = [options[@"sameWindow"] boolValue];
     switchOnFinalSubrole = [options[@"switchOnFinalSubrole"] boolValue];
+    moveCaretOnFinalSubrole = [options[@"moveCaretOnFinalSubrole"] boolValue];
+    changeValueOnFinalSubrole = [options[@"changeValueOnFinalSubrole"] boolValue];
     subroleReads = 0;
     switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
     readOnlyOnSecondSelection = [options[@"readOnlyOnSecondSelection"] boolValue];
