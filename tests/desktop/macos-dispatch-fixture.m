@@ -15,6 +15,7 @@ static BOOL trusted = YES, canPost = YES;
 static BOOL secureInput, protectedField, disabledField, readOnly, notEditable;
 static BOOL modifiers, sameWindow, noWindow, noField, systemField, noRole;
 static BOOL failSnapshot, failStage, failRestore, switchAfterStage, copyAfterStage, pauseAfterStage;
+static BOOL switchDuringProtection;
 static BOOL currentHostOnly;
 static dispatch_semaphore_t resumeFocus;
 static int64_t focusStallMs;
@@ -85,8 +86,15 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
         if (object == systemElement ? systemField : !noField) result = fields[focused];
     } else if ([key isEqual:@"AXWindow"] && !noWindow) result = windows[!sameWindow && object == fields[1]];
     else if ([key isEqual:@"AXRole"] && !noRole) result = @"AXTextArea";
-    else if ([key isEqual:@"AXSubrole"] && protectedField) result = @"AXSecureTextField";
-    else if ([key isEqual:@"AXEnabled"]) result = @(!disabledField);
+    else if ([key isEqual:@"AXSubrole"]) {
+        // Move focus after the post-staging identity and AXFocused reads.
+        if (switchDuringProtection && object == fields[0] &&
+            [clipboard availableTypeFromArray:@[@"org.nspasteboard.TransientType"]]) {
+            switchDuringProtection = NO;
+            focused = 1;
+        }
+        if (protectedField) result = @"AXSecureTextField";
+    } else if ([key isEqual:@"AXEnabled"]) result = @(!disabledField);
     else if ([key isEqual:@"AXFocused"]) result = @(object == fields[focused]);
     else if ([key isEqual:@"AXReadOnly"] && readOnly) result = @YES;
     else if ([key isEqual:@"AXEditable"] && notEditable) result = @NO;
@@ -270,6 +278,7 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"failStage"]) failStage = [options[@"failStage"] boolValue];
     if (options[@"failRestore"]) failRestore = [options[@"failRestore"] boolValue];
     if (options[@"switchAfterStage"]) switchAfterStage = [options[@"switchAfterStage"] boolValue];
+    if (options[@"switchDuringProtection"]) switchDuringProtection = [options[@"switchDuringProtection"] boolValue];
     if (options[@"copyAfterStage"]) copyAfterStage = [options[@"copyAfterStage"] boolValue];
     if (options[@"pauseAfterStage"]) pauseAfterStage = [options[@"pauseAfterStage"] boolValue];
     if (options[@"focusStallMs"]) focusStallMs = [options[@"focusStallMs"] longLongValue];
