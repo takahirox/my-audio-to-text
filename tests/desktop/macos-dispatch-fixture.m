@@ -26,6 +26,7 @@ static BOOL delayInput;
 static BOOL switchAfterKeyPair;
 static NSMutableArray<dispatch_block_t> *delayedInput;
 static BOOL noObserverNotifications;
+static BOOL comboBox;
 static BOOL singleLine;
 static BOOL protectedField;
 static BOOL noEditingOperation;
@@ -74,8 +75,9 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     if ([key isEqual:@"AXFocusedWindow"]) result = windows[focused];
     else if ([key isEqual:@"AXFocusedUIElement"]) result = fields[focused];
     else if ([key isEqual:@"AXRole"]) {
-        if (object == fields[0] || object == fields[1]) result = singleLine ? @"AXTextField" : @"AXTextArea";
-        else result = @"AXGroup";
+        if (object != fields[0] && object != fields[1]) result = @"AXGroup";
+        else if (comboBox) result = @"AXComboBox";
+        else result = singleLine ? @"AXTextField" : @"AXTextArea";
     }
     else if ([key isEqual:@"AXSubrole"] && protectedField) result = @"AXSecureTextField";
     else if ([key isEqual:@"AXEnabled"]) result = @(!disabledField);
@@ -240,6 +242,7 @@ static void handleFixture(NSDictionary *message) {
         return;
     }
     NSDictionary *options = message[@"text"];
+    comboBox = [options[@"comboBox"] boolValue];
     singleLine = [options[@"singleLine"] boolValue];
     protectedField = [options[@"protectedField"] boolValue];
     disabledField = [options[@"disabledField"] boolValue];
