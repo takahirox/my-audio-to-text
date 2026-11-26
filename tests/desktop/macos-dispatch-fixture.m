@@ -15,15 +15,22 @@
 @end
 
 static BOOL browser;
+static BOOL pasteOnly;
+static BOOL alternateApplication;
+static BOOL canPostEvents = YES;
+static BOOL disabledField;
+static BOOL failWrite;
+static NSPasteboard *clipboard;
+static NSUInteger pasteKeyUps;
+static NSString *copyOnPaste;
+static BOOL noObserverNotifications;
 static BOOL singleLine;
 static BOOL protectedField;
-static BOOL noRangeReplacement;
-static BOOL moveCaretOnly;
+static BOOL noEditingOperation;
 static NSUInteger limit;
 static BOOL trusted = YES;
 static BOOL readOnly;
 static BOOL modifiers;
-static BOOL dropWrite;
 static NSUInteger writes;
 static NSMutableArray<NSString *> *browserChunks;
 
@@ -31,16 +38,15 @@ static NSMutableArray<NSString *> *browserChunks;
 + (instancetype)sharedWorkspace { return [self new]; }
 - (NSRunningApplication *)frontmostApplication { return (NSRunningApplication *)self; }
 - (NSNotificationCenter *)notificationCenter { return NSNotificationCenter.defaultCenter; }
-- (pid_t)processIdentifier { return 100; }
+- (pid_t)processIdentifier { return alternateApplication ? 200 : 100; }
 - (NSString *)bundleIdentifier {
-    return browser ? @"com.apple.Safari" : @"com.apple.TextEdit";
+    return alternateApplication ? @"net.example.second-editor" : @"net.example.first-editor";
 }
 - (NSURL *)bundleURL {
-    return [NSURL fileURLWithPath:browser ? @"/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app" : @"/System/Applications/TextEdit.app"];
+    return [NSURL fileURLWithPath:alternateApplication ? @"/tmp/Editor.app" : @"/Applications/Example.app"];
 }
 @end
 
-static id browserDocument;
 static id windows[2];
 static id fields[2];
 static NSString *documents[2] = {@"left|right", @"other"};
@@ -53,7 +59,7 @@ static BOOL denyAccessibilityOnSecondSelection;
 static BOOL moveCaretOnFinalEditability;
 static BOOL changeValueOnFinalEditability;
 static BOOL pauseFinalFocus;
-static BOOL checkedEditabilityAfterSelection;
+static NSUInteger editabilityChecks;
 static dispatch_semaphore_t resumeFocus;
 
 static void emitMessage(NSDictionary *message);
@@ -66,17 +72,14 @@ static AXError copyAttribute(AXUIElementRef element, CFStringRef attribute, CFTy
     else if ([key isEqual:@"AXFocusedUIElement"]) result = fields[focused];
     else if ([key isEqual:@"AXRole"]) {
         if (object == fields[0] || object == fields[1]) result = singleLine ? @"AXTextField" : @"AXTextArea";
-        else result = browser && object == browserDocument ? @"AXWebArea" : @"AXScrollArea";
+        else result = @"AXGroup";
     }
-    else if ([key isEqual:@"AXSubrole"] && object == windows[0]) result = @"AXStandardWindow";
     else if ([key isEqual:@"AXSubrole"] && protectedField) result = @"AXSecureTextField";
-    else if ([key isEqual:@"AXEnabled"]) result = @YES;
+    else if ([key isEqual:@"AXEnabled"]) result = @(!disabledField);
     else if ([key isEqual:@"AXFocused"]) result = @(object == fields[focused]);
-    else if ([key isEqual:@"AXParent"]) result = browser ? browserDocument : windows[0];
-    else if ([key isEqual:@"AXWindow"]) result = windows[0];
     else if ([key isEqual:@"AXValue"]) result = documents[object == fields[1]];
     else if ([key isEqual:@"AXSelectedTextRange"]) {
-        // Change the target state on the final selection read without an observer callback.
+        // Change state while capturing an explicit range, without an observer callback.
         if (++selectionReads == 2) {
             if (switchOnSecondSelection) focused = 1;
             if (readOnlyOnSecondSelection) readOnly = YES;
@@ -95,7 +98,7 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
     (void)options;
     assert([(__bridge NSArray *)keys isEqual:(@[@"AXFocusedWindow", @"AXFocusedUIElement"])]);
     *values = CFBridgingRetain(@[windows[focused], fields[focused]]);
-    if (pauseFinalFocus && checkedEditabilityAfterSelection) {
+    if (pauseFinalFocus && editabilityChecks >= 2) {
         pauseFinalFocus = NO;
         emitMessage(@{@"focusReadPaused": @YES});
         assert(dispatch_semaphore_wait(resumeFocus,
@@ -105,8 +108,7 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
 }
 
 static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *allowed) {
-    if (selectionReads == 2) {
-        checkedEditabilityAfterSelection = YES;
+    if (CFEqual(key, kAXValueAttribute) && ++editabilityChecks == 2) {
         if (moveCaretOnFinalEditability) {
             moveCaretOnFinalEditability = NO;
             selection = CFRangeMake(2, 0);
@@ -116,26 +118,30 @@ static AXError textWritable(AXUIElementRef element, CFStringRef key, Boolean *al
             documents[0] = @"left|RIGHT";
         }
     }
-    *allowed = (__bridge id)element == fields[0] && !readOnly &&
-        CFEqual(key, browser ? kAXValueAttribute : kAXSelectedTextAttribute);
+    *allowed = (__bridge id)element == fields[0] && !readOnly && !noEditingOperation &&
+        CFEqual(key, (browser || pasteOnly) ? kAXValueAttribute : kAXSelectedTextAttribute);
     return kAXErrorSuccess;
 }
 
-static AXError editDocument(AXUIElementRef element, CFStringRef key, CFTypeRef value) {
-    assert(!browser && trusted && !readOnly && !modifiers && CFEqual(key, kAXSelectedTextAttribute));
-    writes++;
-    if (dropWrite) return kAXErrorSuccess;
-    NSUInteger document = (__bridge id)element == fields[1];
-    NSString *text = (__bridge NSString *)value;
+static void applyEdit(NSUInteger document, CFRange range, NSString *text) {
+    if (singleLine) text = [text stringByReplacingOccurrencesOfString:@"\n" withString:@""];
+    if (limit && text.length > limit) text = [text substringToIndex:limit];
     documents[document] = [documents[document] stringByReplacingCharactersInRange:
-        NSMakeRange((NSUInteger)selection.location, (NSUInteger)selection.length) withString:text];
-    selection = CFRangeMake(selection.location + (CFIndex)text.length, 0);
+        NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length) withString:text];
+    selection = CFRangeMake(range.location + (CFIndex)text.length, 0);
+}
+
+static AXError editDocument(AXUIElementRef element, CFStringRef key, CFTypeRef value) {
+    assert(!browser && !pasteOnly && trusted && !readOnly && !modifiers && CFEqual(key, kAXSelectedTextAttribute));
+    writes++;
+    if (failWrite) return kAXErrorFailure;
+    applyEdit((__bridge id)element == fields[1], selection, (__bridge NSString *)value);
     return kAXErrorSuccess;
 }
 
 static AXError copyParameterizedNames(AXUIElementRef element, CFArrayRef *names) {
     assert((__bridge id)element == fields[focused]);
-    *names = CFBridgingRetain(noRangeReplacement ? @[@"AXTextOperation"] : @[@"AXReplaceRangeWithText", @"AXTextOperation"]);
+    *names = CFBridgingRetain(!browser ? @[@"AXTextOperation"] : @[@"AXReplaceRangeWithText", @"AXTextOperation"]);
     return kAXErrorSuccess;
 }
 
@@ -153,14 +159,35 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
     [browserChunks addObject:text];
     writes++;
     *value = CFRetain(kCFBooleanTrue);
-    if (moveCaretOnly) selection = CFRangeMake(range.location + 1, 0);
-    if (!trusted || readOnly || dropWrite || moveCaretOnly) return kAXErrorSuccess;
-    if (singleLine) text = [text stringByReplacingOccurrencesOfString:@"\n" withString:@""];
-    if (limit && text.length > limit) text = [text substringToIndex:limit];
-    documents[0] = [documents[0] stringByReplacingCharactersInRange:
-        NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length) withString:text];
-    selection = CFRangeMake(range.location + (CFIndex)text.length, 0);
+    if (failWrite) return kAXErrorFailure;
+    if (trusted && !readOnly) applyEdit(0, range, text);
     return kAXErrorSuccess;
+}
+
+@interface NSPasteboard (DispatchFixture)
++ (NSPasteboard *)fixtureGeneralPasteboard;
+@end
+@implementation NSPasteboard (DispatchFixture)
++ (NSPasteboard *)fixtureGeneralPasteboard { return clipboard; }
+@end
+
+static void postPasteEvent(pid_t pid, CGEventRef event) {
+    assert(pasteOnly && pid == (alternateApplication ? 200 : 100));
+    assert(CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode) == kVK_ANSI_V);
+    assert(CGEventGetFlags(event) == kCGEventFlagMaskCommand);
+    if (CGEventGetType(event) == kCGEventKeyUp) {
+        pasteKeyUps++;
+        return;
+    }
+    assert(CGEventGetType(event) == kCGEventKeyDown);
+    NSString *text = [clipboard stringForType:NSPasteboardTypeString];
+    assert(text && trusted && !protectedField && !readOnly && !modifiers);
+    writes++;
+    applyEdit(focused, selection, text);
+    if (copyOnPaste) {
+        [clipboard clearContents];
+        [clipboard setString:copyOnPaste forType:NSPasteboardTypeString];
+    }
 }
 
 #define main packagedHelperMain
@@ -169,14 +196,18 @@ static AXError copyParameterized(AXUIElementRef element, CFStringRef key, CFType
 #define AXIsProcessTrustedWithOptions(options) ((void)(options), trusted)
 #define AXObserverCreate(pid, callback, observer) AXObserverCreate(getpid(), callback, observer)
 #define GetCurrentKeyModifiers() (modifiers ? cmdKey : 0)
-#define AXObserverAddNotification(...) kAXErrorSuccess
+#define AXObserverAddNotification(...) (noObserverNotifications ? kAXErrorNotificationUnsupported : kAXErrorSuccess)
 #define AXUIElementCopyAttributeValue copyAttribute
 #define AXUIElementCopyMultipleAttributeValues copyFocus
 #define AXUIElementIsAttributeSettable textWritable
 #define AXUIElementSetAttributeValue editDocument
 #define AXUIElementCopyParameterizedAttributeNames copyParameterizedNames
 #define AXUIElementCopyParameterizedAttributeValue copyParameterized
+#define generalPasteboard fixtureGeneralPasteboard
+#define CGPreflightPostEventAccess() canPostEvents
+#define CGEventPostToPid postPasteEvent
 #include "../../desktop/mac-target.m"
+#undef generalPasteboard
 #undef main
 
 static void handleFixture(NSDictionary *message) {
@@ -191,8 +222,11 @@ static void handleFixture(NSDictionary *message) {
     NSDictionary *options = message[@"text"];
     singleLine = [options[@"singleLine"] boolValue];
     protectedField = [options[@"protectedField"] boolValue];
-    noRangeReplacement = [options[@"noRangeReplacement"] boolValue];
-    moveCaretOnly = [options[@"moveCaretOnly"] boolValue];
+    disabledField = [options[@"disabledField"] boolValue];
+    noObserverNotifications = [options[@"noObserverNotifications"] boolValue];
+    canPostEvents = ![options[@"denyPostEvents"] boolValue];
+    failWrite = [options[@"failWrite"] boolValue];
+    noEditingOperation = [options[@"noEditingOperation"] boolValue];
     limit = [options[@"limit"] unsignedIntegerValue];
     if (options[@"focused"]) focused = [options[@"focused"] unsignedIntegerValue];
     switchOnSecondSelection = [options[@"switchOnSecondSelection"] boolValue];
@@ -202,25 +236,43 @@ static void handleFixture(NSDictionary *message) {
     changeValueOnFinalEditability = [options[@"changeValueOnFinalEditability"] boolValue];
     if (options[@"selectionLength"]) selection.length = [options[@"selectionLength"] integerValue];
     pauseFinalFocus = [options[@"pauseFinalFocus"] boolValue];
-    checkedEditabilityAfterSelection = NO;
+    editabilityChecks = 0;
     selectionReads = 0;
     trusted = ![options[@"denyAccessibility"] boolValue];
     readOnly = [options[@"readOnly"] boolValue];
     modifiers = [options[@"held"] boolValue];
-    dropWrite = [options[@"dropWrite"] boolValue];
+    copyOnPaste = options[@"copyOnPaste"];
     NSMutableDictionary *state = [@{
         @"text": documents[0], @"other": documents[1], @"writes": @(writes),
         @"focused": @(focused),
     } mutableCopy];
     if (browser) state[@"chunks"] = browserChunks;
+    if (pasteOnly) {
+        NSMutableArray *items = [NSMutableArray array];
+        for (NSPasteboardItem *item in clipboard.pasteboardItems) {
+            NSMutableDictionary *types = [NSMutableDictionary dictionary];
+            for (NSPasteboardType type in item.types) types[type] = [item stringForType:type];
+            [items addObject:types];
+        }
+        state[@"clipboard"] = items;
+        state[@"pasteKeyUps"] = @(pasteKeyUps);
+    }
     emitMessage(@{@"request": message[@"request"], @"fixture": state});
 }
 
 static void runFixture(void) {
     if (browser) {
-        browserDocument = CFBridgingRelease(AXUIElementCreateApplication(105));
         windows[1] = windows[0];
         browserChunks = [NSMutableArray array];
+    }
+    if (pasteOnly) {
+        clipboard = [NSPasteboard pasteboardWithUniqueName];
+        NSPasteboardItem *first = [NSPasteboardItem new];
+        [first setString:@"existing" forType:NSPasteboardTypeString];
+        [first setString:@"<b>existing</b>" forType:NSPasteboardTypeHTML];
+        NSPasteboardItem *second = [NSPasteboardItem new];
+        [second setString:@"second" forType:NSPasteboardTypeString];
+        assert(([clipboard writeObjects:@[first, second]]));
     }
     selection = CFRangeMake(5, 0);
     resumeFocus = dispatch_semaphore_create(0);
@@ -247,33 +299,10 @@ int main(int argc, const char **argv) {
         windows[1] = CFBridgingRelease(AXUIElementCreateApplication(102));
         fields[0] = CFBridgingRelease(AXUIElementCreateApplication(103));
         fields[1] = CFBridgingRelease(AXUIElementCreateApplication(104));
-        if (argc == 2) {
-            browser = strcmp(argv[1], "browser") == 0;
-            runFixture();
-            return 0;
-        }
-        bound = [Binding new];
-        bound.pid = 100;
-        bound.application = CFBridgingRelease(AXUIElementCreateApplication(bound.pid));
-        bound.window = windows[0];
-        bound.area = fields[0];
-
-        selection = CFRangeMake(5, 0);
-        switchOnSecondSelection = YES;
-        pendingRequest = @1;
-        pendingText = @"東京🙂";
-        waitingForRelease = YES;
-        insertWhenReleased();
-        assert(focused == 1 && !pendingRequest);
-        assert([documents[0] isEqual:@"left|right"] && [documents[1] isEqual:@"other"]);
-
-        focused = 0;
-        switchOnSecondSelection = NO;
-        pendingRequest = @2;
-        pendingText = @"東京🙂";
-        waitingForRelease = YES;
-        insertWhenReleased();
-        assert(!pendingRequest);
-        assert([documents[0] isEqual:@"left|東京🙂right"] && [documents[1] isEqual:@"other"]);
+        assert(argc == 2 || argc == 3);
+        browser = strcmp(argv[1], "range") == 0;
+        pasteOnly = strcmp(argv[1], "paste") == 0;
+        alternateApplication = argc == 3;
+        runFixture();
     }
 }

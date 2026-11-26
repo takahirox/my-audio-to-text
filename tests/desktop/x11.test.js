@@ -297,7 +297,7 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await wait(320);
   x('key', '--delay', '1', hotkey, 'ctrl+Page_Up');
   await eventually(() => native.get().focus === 0, 'GTK focus did not move immediately after the shortcut');
-  await eventually(async () => /lost focus|changed|closed|editable plain-text/i.test((await view()).session.error),
+  await eventually(async () => /lost focus|changed|closed|exposes AT-SPI editing/i.test((await view()).session.error),
     'Shortcut did not reject the focus change during Start');
   await phase('idle');
   assert.deepEqual(native.get().values, ['', 'left| 東京🙂\nright']);
@@ -361,7 +361,7 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   assert.deepEqual(errors, []);
 });
 
-test('packaged app leaves unverified GTK buffers and protected controls untouched', { timeout: 60000 }, async t => {
+test('packaged app edits independent GTK fields within native limits and leaves protected controls untouched', { timeout: 60000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-gtk-limits-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
   const { app, page, view } = await launch(t);
@@ -371,35 +371,45 @@ test('packaged app leaves unverified GTK buffers and protected controls untouche
   const native = await gtkFixture(t, dir);
   const indicator = app.windows().find(window => window.url().endsWith('/indicator.html'));
 
-  x('key', 'ctrl+Tab', 'ctrl+Tab');
-  const targets = [
-    [2, 'editable plain-text'],
-    [3, 'may limit text length'],
-    [4, 'editable plain-text region'],
-    [5, 'cannot verify that this GTK buffer accepts whole edits'],
-  ];
-  for (const [focus, message] of targets) {
-    if (focus > 2) x('key', focus === 5 ? 'ctrl+Tab' : 'Tab');
-    if (focus === 3) x('key', 'Home', 'Right');
-    const before = await eventually(() => {
-      const state = native.get();
-      return state.focus === focus && state;
-    }, `GTK did not focus fixture control ${focus}`);
+  async function tryField(focus, verify) {
+    await eventually(() => native.get().focus === focus, `GTK did not focus fixture control ${focus}`);
     await trigger(native.id);
+    await verify();
+    assert.equal(x('getwindowfocus'), native.id);
+  }
+
+  async function refused(message) {
     await eventually(async () => {
       const { session } = await view();
-      assert.equal(session.phase, 'idle');
-      assert.ok(session.error.includes(message), session.error);
-      return true;
-    }, `Desktop did not refuse GTK fixture control ${focus}`);
-    assert.deepEqual(native.get(), before);
-    assert.equal(x('getwindowfocus'), native.id);
+      return session.phase === 'idle' && session.error.includes(message);
+    }, `Desktop did not refuse GTK fixture control: ${message}`);
     await indicator.getByRole('button', { name: 'Dismiss' }).click();
     await eventually(async () => !(await view()).session.error, 'The desktop error was not dismissed');
   }
+
+  async function edited(check) {
+    await eventually(async () => {
+      const { session } = await view();
+      assert.equal(session.error, '');
+      return session.phase === 'running' && check(native.get());
+    }, 'Desktop did not apply the native edit');
+    await trigger(native.id);
+    await eventually(async () => (await view()).session.phase === 'idle', 'Desktop did not stop');
+  }
+
+  await activate(native.id);
+  x('key', 'ctrl+Tab', 'ctrl+Tab');
+  await tryField(2, () => refused('exposes AT-SPI editing'));
+  x('key', 'Tab', 'Home', 'Right');
+  await tryField(3, () => edited(state => state.values[3] === 'xaby'));
+  x('key', 'Tab');
+  await tryField(4, () => refused('editable text region'));
+  x('key', 'ctrl+Tab');
+  await tryField(5, () => edited(state => state.constrained === 'left|abright'));
+
   assert.deepEqual(native.get(), {
-    values: ['left|right', '', 'secret', 'xy'], focus: 5, limitedEdits: 0,
-    tagged: 'open locked tail', constrained: 'left|right', constrainedCaret: 5, constrainedEdits: 0,
+    values: ['left|right', '', 'secret', 'xaby'], focus: 5, limitedEdits: 1,
+    tagged: 'open locked tail', constrained: 'left|abright', constrainedCaret: 7, constrainedEdits: 1,
   });
 });
 
@@ -424,7 +434,7 @@ test('packaged app refuses unsupported Chromium targets before any edit', { time
     await eventually(async () => {
       const sessions = await page.evaluate(() => window.testSessions);
       assert.deepEqual(sessions.map(session => session.phase), ['preparing', 'canceling', 'idle']);
-      assert.match(sessions.at(-1).error, /editable plain-text|authorized text field/);
+      assert.match(sessions.at(-1).error, /exposes AT-SPI editing|authorized text field/);
       return true;
     }, `Desktop did not report a refusal for ${target}`);
     const report = chromium.get().report;

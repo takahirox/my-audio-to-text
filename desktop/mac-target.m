@@ -1,17 +1,24 @@
 #import <AppKit/AppKit.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <Carbon/Carbon.h>
+#import <signal.h>
 #import <stdio.h>
 
 static NSString *const permissionError =
     @"Allow My Audio to Text in System Settings → Privacy & Security → Device Control and Data Access (Accessibility), then start again.";
 static NSString *const targetError =
-    @"Focus an editable TextEdit document or a supported Safari web text field. This field cannot be safely edited.";
+    @"Focus an editable text field that exposes Accessibility editing and try again.";
 static NSString *const focusError = @"The authorized window or text field changed or lost focus.";
 static NSString *const selectionError = @"The text or selection changed before the edit. Voice typing stopped.";
-static NSString *const writeError = @"TextEdit did not confirm the complete edit. Voice typing stopped.";
-static NSString *const browserWriteError = @"Safari did not confirm the edit. Voice typing stopped.";
+static NSString *const writeError = @"The focused field rejected the Accessibility edit. Voice typing stopped.";
+static NSString *const pastePermissionError =
+    @"Allow My Audio to Text to post keyboard events under Accessibility in System Settings → Privacy & Security, then start again.";
+static NSString *const pasteboardError =
+    @"The clipboard changed or could not be preserved for native paste. Voice typing stopped.";
 static CFStringRef const replaceRange = CFSTR("AXReplaceRangeWithText");
+
+typedef NS_ENUM(NSInteger, EditMethod) { Unavailable, SelectedText, RangeReplacement, NativePaste };
+
 static id attribute(AXUIElementRef element, CFStringRef key) {
     CFTypeRef value = NULL;
     if (!element || AXUIElementCopyAttributeValue(element, key, &value) != kAXErrorSuccess) return nil;
@@ -41,45 +48,37 @@ static BOOL hasSameTextAndSelection(AXUIElementRef element, NSString *value, CFR
         currentSelection.location == range.location && currentSelection.length == range.length;
 }
 
-static BOOL isDocumentArea(AXUIElementRef area, AXUIElementRef window) {
-    if (!area || !window ||
-        ![attribute(area, kAXRoleAttribute) isEqual:@"AXTextArea"] ||
-        [attribute(area, kAXSubroleAttribute) isEqual:@"AXSecureTextField"] ||
-        ![attribute(area, kAXFocusedAttribute) isEqual:@YES] ||
-        ![attribute(window, kAXSubroleAttribute) isEqual:@"AXStandardWindow"] ||
-        !writable(area, kAXSelectedTextAttribute)) return NO;
-
-    id parent = elementAttribute(area, kAXParentAttribute);
-    if (!parent ||
-        ![attribute((__bridge AXUIElementRef)parent, kAXRoleAttribute) isEqual:@"AXScrollArea"]) return NO;
-    id owner = elementAttribute(area, kAXWindowAttribute);
-    return owner && CFEqual((__bridge CFTypeRef)owner, window);
-}
-
-static id safariWebArea(AXUIElementRef area, AXUIElementRef window) {
-    if (!area || !window || ![attribute(window, kAXSubroleAttribute) isEqual:@"AXStandardWindow"]) return nil;
-    id role = attribute(area, kAXRoleAttribute);
-    if (![role isEqual:@"AXTextArea"] && ![role isEqual:@"AXTextField"]) return nil;
+static EditMethod editMethod(AXUIElementRef field, AXUIElementRef window) {
+    if (!field || !window) return Unavailable;
+    id role = attribute(field, kAXRoleAttribute);
+    if (![role isEqual:@"AXTextArea"] && ![role isEqual:@"AXTextField"]) return Unavailable;
     CFTypeRef subrole = NULL;
-    AXError status = AXUIElementCopyAttributeValue(area, kAXSubroleAttribute, &subrole);
+    AXError status = AXUIElementCopyAttributeValue(field, kAXSubroleAttribute, &subrole);
     id fieldSubrole = CFBridgingRelease(subrole);
     if ((status != kAXErrorSuccess && status != kAXErrorNoValue && status != kAXErrorAttributeUnsupported) ||
         [fieldSubrole isEqual:@"AXSecureTextField"] ||
-        ![attribute(area, kAXEnabledAttribute) isEqual:@YES] ||
-        ![attribute(area, kAXFocusedAttribute) isEqual:@YES] ||
-        !writable(area, kAXValueAttribute)) return nil;
-    id owner = elementAttribute(area, kAXWindowAttribute);
-    if (!owner || !CFEqual((__bridge CFTypeRef)owner, window)) return nil;
+        [attribute(field, kAXEnabledAttribute) isEqual:@NO] ||
+        [attribute(field, kAXFocusedAttribute) isEqual:@NO] ||
+        [attribute(field, CFSTR("AXReadOnly")) isEqual:@YES]) return Unavailable;
+    id editable = attribute(field, CFSTR("AXEditable"));
+    if ([editable isEqual:@NO]) return Unavailable;
+    id owner = elementAttribute(field, kAXWindowAttribute);
+    if (owner && !CFEqual((__bridge CFTypeRef)owner, window)) return Unavailable;
 
-    id ancestor = elementAttribute(area, kAXParentAttribute);
-    for (NSUInteger depth = 0; ancestor && depth < 32; depth++) {
-        AXUIElementRef element = (__bridge AXUIElementRef)ancestor;
-        id parentRole = attribute(element, kAXRoleAttribute);
-        if ([parentRole isEqual:@"AXWebArea"]) return ancestor;
-        if (!parentRole || [parentRole isEqual:@"AXWindow"]) break;
-        ancestor = elementAttribute(element, kAXParentAttribute);
+    BOOL canEditValue = writable(field, kAXValueAttribute) || [editable isEqual:@YES];
+    if (canEditValue) {
+        CFArrayRef parameterized = NULL;
+        if (AXUIElementCopyParameterizedAttributeNames(field, &parameterized) == kAXErrorSuccess) {
+            NSArray *names = CFBridgingRelease(parameterized);
+            CFRange selection;
+            if ([names containsObject:(__bridge NSString *)replaceRange] &&
+                [attribute(field, kAXValueAttribute) isKindOfClass:NSString.class] && readSelection(field, &selection)) {
+                return RangeReplacement;
+            }
+        }
     }
-    return nil;
+    if (writable(field, kAXSelectedTextAttribute)) return SelectedText;
+    return canEditValue ? NativePaste : Unavailable;
 }
 
 @interface Binding : NSObject
@@ -88,7 +87,6 @@ static id safariWebArea(AXUIElementRef area, AXUIElementRef window) {
 @property (strong) id application;
 @property (strong) id window;
 @property (strong) id area;
-@property (strong) id webArea;
 @property (strong) NSString *failed;
 @property AXObserverRef observer;
 @end
@@ -124,6 +122,8 @@ static CFAbsoluteTime nextWaitingNotice;
 // Synchronize only this state so the reader never has to wait for an AX call.
 static NSMutableSet<NSString *> *releaseRequests;
 static BOOL inputClosed;
+static BOOL exiting;
+static BOOL pasteInFlight;
 
 static void emitMessage(NSDictionary *message) {
     NSData *data = [NSJSONSerialization dataWithJSONObject:message options:0 error:NULL];
@@ -169,61 +169,33 @@ static Binding *captureTarget(void) {
         result.failed = permissionError;
         return result;
     }
-    NSRunningApplication *front = NSWorkspace.sharedWorkspace.frontmostApplication;
-    BOOL textEdit = [front.bundleIdentifier isEqualToString:@"com.apple.TextEdit"] &&
-        [front.bundleURL.path isEqualToString:@"/System/Applications/TextEdit.app"];
-    NSURL *systemSafari = [NSURL fileURLWithPath:@"/System/Cryptexes/App/System/Applications/Safari.app"];
-    BOOL safari = [front.bundleIdentifier isEqualToString:@"com.apple.Safari"] &&
-        [front.bundleURL.URLByResolvingSymlinksInPath.path
-            isEqualToString:systemSafari.URLByResolvingSymlinksInPath.path];
-    if (!textEdit && !safari) {
+    pid_t pid = NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier;
+    if (pid <= 0) {
         result.failed = targetError;
         return result;
     }
-
-    pid_t pid = front.processIdentifier;
     result.pid = pid;
     AXUIElementRef application = AXUIElementCreateApplication(pid);
     result.application = CFBridgingRelease(application);
     AXUIElementSetMessagingTimeout(application, 0.25);
     result.window = elementAttribute(application, kAXFocusedWindowAttribute);
     result.area = elementAttribute(application, kAXFocusedUIElementAttribute);
-    AXUIElementRef area = (__bridge AXUIElementRef)result.area;
-    AXUIElementRef window = (__bridge AXUIElementRef)result.window;
-    if (safari) {
-        result.webArea = safariWebArea(area, window);
-        CFArrayRef parameterized = NULL;
-        CFRange selection;
-        if (!result.webArea || !readSelection(area, &selection) ||
-            AXUIElementCopyParameterizedAttributeNames(area, &parameterized) != kAXErrorSuccess) {
-            result.failed = targetError;
-            return result;
-        }
-        NSArray *names = CFBridgingRelease(parameterized);
-        if (![names containsObject:(__bridge NSString *)replaceRange]) {
-            result.failed = targetError;
-            return result;
-        }
-    } else if (!isDocumentArea(area, window)) {
+    if (!result.window || !result.area) {
         result.failed = targetError;
         return result;
     }
+
+    // Notification support varies. Keep every observer the provider supports
+    // and recheck the focused window and element even when it supports none.
     AXObserverRef observer = NULL;
-    if (AXObserverCreate(pid, focusedChanged, &observer) != kAXErrorSuccess) {
-        result.failed = targetError;
-        return result;
-    }
-    result.observer = observer;
-    if (AXObserverAddNotification(observer, application, kAXFocusedUIElementChangedNotification,
-                                  (__bridge void *)result) != kAXErrorSuccess ||
-        AXObserverAddNotification(observer, application, kAXFocusedWindowChangedNotification,
-                                  (__bridge void *)result) != kAXErrorSuccess ||
+    if (AXObserverCreate(pid, focusedChanged, &observer) == kAXErrorSuccess) {
+        result.observer = observer;
+        AXObserverAddNotification(observer, application, kAXFocusedUIElementChangedNotification, (__bridge void *)result);
+        AXObserverAddNotification(observer, application, kAXFocusedWindowChangedNotification, (__bridge void *)result);
         AXObserverAddNotification(observer, (__bridge AXUIElementRef)result.window, kAXUIElementDestroyedNotification,
-                                  (__bridge void *)result) != kAXErrorSuccess) {
-        result.failed = targetError;
-        return result;
+                                  (__bridge void *)result);
+        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), kCFRunLoopCommonModes);
     }
-    CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), kCFRunLoopCommonModes);
     return result;
 }
 
@@ -240,67 +212,15 @@ static BOOL hasBoundFocus(Binding *binding) {
         NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier == binding.pid;
 }
 
-static NSString *check(Binding *binding) {
+static NSString *check(Binding *binding, EditMethod *method) {
     if (binding.failed) return binding.failed;
     if (!AXIsProcessTrusted()) return permissionError;
     if (!hasBoundFocus(binding)) return focusError;
-    AXUIElementRef area = (__bridge AXUIElementRef)binding.area;
-    AXUIElementRef window = (__bridge AXUIElementRef)binding.window;
-    if (binding.webArea) {
-        id document = safariWebArea(area, window);
-        return document && CFEqual((__bridge CFTypeRef)document, (__bridge CFTypeRef)binding.webArea) ? nil : targetError;
-    }
-    return isDocumentArea(area, window) ? nil : targetError;
-}
-
-static void verifyWrite(NSNumber *request, NSString *expected, CFIndex caret, CFAbsoluteTime deadline) {
-    if (![request isEqual:pendingRequest]) return;
-    NSString *error = check(bound);
-    if (error) {
-        finishWrite(error);
-        return;
-    }
-    AXUIElementRef area = (__bridge AXUIElementRef)bound.area;
-    CFRange selection;
-    if ([attribute(area, kAXValueAttribute) isEqual:expected] && readSelection(area, &selection) &&
-        selection.location == caret && selection.length == 0) {
-        finishWrite(nil);
-    } else if (CFAbsoluteTimeGetCurrent() >= deadline) {
-        finishWrite(writeError);
-    } else {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-            verifyWrite(request, expected, caret, deadline);
-        });
-    }
-}
-
-static void verifySafariWrite(NSNumber *request, NSString *original, NSRange range, CFAbsoluteTime deadline) {
-    if (![request isEqual:pendingRequest]) return;
-    NSString *error = check(bound);
-    if (error) {
-        finishWrite(error);
-        return;
-    }
-    AXUIElementRef area = (__bridge AXUIElementRef)bound.area;
-    NSString *value = attribute(area, kAXValueAttribute);
-    CFRange selection;
-    NSUInteger suffixLength = original.length - NSMaxRange(range);
-    // Accept a compatible change at the original selection, including native
-    // truncation or filtering. A caret move by itself is not evidence of an edit.
-    if ([value isKindOfClass:NSString.class] && ![value isEqual:original] &&
-        value.length >= range.location + suffixLength &&
-        [value hasPrefix:[original substringToIndex:range.location]] &&
-        [value hasSuffix:[original substringFromIndex:NSMaxRange(range)]] &&
-        readSelection(area, &selection) && selection.length == 0 &&
-        selection.location == (CFIndex)(value.length - suffixLength)) {
-        finishWrite(nil);
-    } else if (CFAbsoluteTimeGetCurrent() >= deadline) {
-        finishWrite(browserWriteError);
-    } else {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
-            verifySafariWrite(request, original, range, deadline);
-        });
-    }
+    EditMethod available = editMethod((__bridge AXUIElementRef)binding.area, (__bridge AXUIElementRef)binding.window);
+    if (available == Unavailable) return targetError;
+    if (available == NativePaste && !CGPreflightPostEventAccess()) return pastePermissionError;
+    if (method) *method = available;
+    return nil;
 }
 
 static BOOL shortcutHeld(void) {
@@ -313,8 +233,111 @@ static BOOL releaseRequested(void) {
     }
 }
 
+static NSArray<NSPasteboardItem *> *copyPasteboardItems(NSPasteboard *pasteboard) {
+    if (@available(macOS 15.4, *)) {
+        if (pasteboard.accessBehavior == NSPasteboardAccessBehaviorAlwaysDeny) return nil;
+    }
+    NSMutableArray<NSPasteboardItem *> *copies = [NSMutableArray array];
+    NSArray<NSPasteboardItem *> *items = pasteboard.pasteboardItems;
+    if (!items && pasteboard.types.count) return nil;
+    for (NSPasteboardItem *item in items) {
+        NSPasteboardItem *copy = [NSPasteboardItem new];
+        for (NSPasteboardType type in item.types) {
+            // A file promise needs its original provider when pasted.
+            if ([type isEqual:(__bridge NSString *)kPasteboardTypeFileURLPromise]) return nil;
+            NSData *data = [item dataForType:type];
+            if (!data || ![copy setData:data forType:type]) return nil;
+        }
+        if (!copy.types.count) return nil;
+        [copies addObject:copy];
+    }
+    return copies;
+}
+
+static BOOL restorePasteboard(NSPasteboard *pasteboard, NSInteger generation, NSArray<NSPasteboardItem *> *items) {
+    if (pasteboard.changeCount != generation) return NO;
+    [pasteboard clearContents];
+    return !items.count || [pasteboard writeObjects:items];
+}
+
+static void requestExit(void) {
+    exiting = YES;
+    if (!pasteInFlight) exit(0);
+}
+
+static NSString *dispatchError(Binding *binding) {
+    if (!hasBoundFocus(binding)) return focusError;
+    if (!AXIsProcessTrusted()) return permissionError;
+    if (releaseRequested() || exiting) return focusError;
+    return nil;
+}
+
+static void pasteText(Binding *binding, NSNumber *request, NSString *text) {
+    NSPasteboard *pasteboard = NSPasteboard.generalPasteboard;
+    NSInteger originalGeneration = pasteboard.changeCount;
+    NSArray<NSPasteboardItem *> *original = copyPasteboardItems(pasteboard);
+    CGEventRef down = CGEventCreateKeyboardEvent(NULL, kVK_ANSI_V, true);
+    CGEventRef up = CGEventCreateKeyboardEvent(NULL, kVK_ANSI_V, false);
+    if (!original || !down || !up) {
+        if (down) CFRelease(down);
+        if (up) CFRelease(up);
+        finishWrite(original ? writeError : pasteboardError);
+        return;
+    }
+    CGEventSetFlags(down, kCGEventFlagMaskCommand);
+    CGEventSetFlags(up, kCGEventFlagMaskCommand);
+    EditMethod method;
+    NSString *error = check(binding, &method);
+    if (!error && method != NativePaste) error = targetError;
+    if (!error) error = dispatchError(binding);
+    if (!error && shortcutHeld()) {
+        CFRelease(down);
+        CFRelease(up);
+        writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
+        return;
+    }
+    if (!error && pasteboard.changeCount != originalGeneration) error = pasteboardError;
+    if (error) {
+        CFRelease(down);
+        CFRelease(up);
+        finishWrite(error);
+        return;
+    }
+
+    NSInteger generation = [pasteboard clearContents];
+    if (![pasteboard setString:text forType:NSPasteboardTypeString]) error = pasteboardError;
+    else if (!CGPreflightPostEventAccess()) error = pastePermissionError;
+    else error = dispatchError(binding);
+    if (!error && pasteboard.changeCount != generation) error = pasteboardError;
+    if (error || shortcutHeld()) {
+        BOOL restored = restorePasteboard(pasteboard, generation, original);
+        CFRelease(down);
+        CFRelease(up);
+        if (error || !restored) finishWrite(error ?: pasteboardError);
+        else writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
+        return;
+    }
+    waitingForRelease = NO;
+    pasteInFlight = YES;
+    CGEventPostToPid(binding.pid, down);
+    CGEventPostToPid(binding.pid, up);
+    CFRelease(down);
+    CFRelease(up);
+
+    // The receiving app reads the clipboard asynchronously. Keep writes
+    // serialized until it has had time to read, even if this session ends.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 200 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        BOOL restored = restorePasteboard(pasteboard, generation, original);
+        pasteInFlight = NO;
+        if (exiting) exit(0);
+        if ([request isEqual:pendingRequest]) {
+            finishWrite(dispatchError(binding) ?: (restored ? nil : pasteboardError));
+        }
+    });
+}
+
 static void insertWhenReleased(void) {
-    if (!waitingForRelease) return;
+    if (!waitingForRelease || pasteInFlight) return;
     CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
     if (shortcutHeld()) {
         writeAfter = now + 0.08;
@@ -326,82 +349,69 @@ static void insertWhenReleased(void) {
     }
     if (now < writeAfter) return;
     Binding *binding = bound;
-    NSNumber *request = pendingRequest;
-    NSString *text = pendingText;
-    NSString *error = check(binding);
+    EditMethod method;
+    NSString *error = check(binding, &method);
     if (error) {
         finishWrite(error);
         return;
     }
+
     AXUIElementRef area = (__bridge AXUIElementRef)binding.area;
-    NSString *value = attribute(area, kAXValueAttribute);
+    NSDictionary *replacement = nil;
+    NSString *value = nil;
     CFRange range;
-    if (![value isKindOfClass:NSString.class] || !readSelection(area, &range) ||
-        range.location < 0 || range.length < 0 || (NSUInteger)range.location > value.length ||
-        (NSUInteger)range.length > value.length - (NSUInteger)range.location) {
-        finishWrite(targetError);
+    if (method == RangeReplacement) {
+        value = attribute(area, kAXValueAttribute);
+        if (![value isKindOfClass:NSString.class] || !readSelection(area, &range) ||
+            range.location < 0 || range.length < 0 || (NSUInteger)range.location > value.length ||
+            (NSUInteger)range.length > value.length - (NSUInteger)range.location) {
+            finishWrite(selectionError);
+            return;
+        }
+        id rangeValue = CFBridgingRelease(AXValueCreate(kAXValueTypeCFRange, &range));
+        if (!rangeValue) {
+            finishWrite(writeError);
+            return;
+        }
+        replacement = @{@"AXReplacementRange": rangeValue, @"AXReplacementText": pendingText};
+    }
+
+    EditMethod current;
+    error = check(binding, &current);
+    if (error || current != method) {
+        finishWrite(error ?: targetError);
         return;
     }
-    if (!hasSameTextAndSelection(area, value, range)) {
+    // Explicit ranges remain valid only while the value and selection match.
+    if (replacement && !hasSameTextAndSelection(area, value, range)) {
         finishWrite(selectionError);
         return;
     }
-    NSRange selected = NSMakeRange((NSUInteger)range.location, (NSUInteger)range.length);
-    NSString *expected = nil;
-    NSDictionary *safariReplacement = nil;
-    if (binding.webArea) {
-        safariReplacement = @{
-            @"AXReplacementRange": CFBridgingRelease(AXValueCreate(kAXValueTypeCFRange, &range)),
-            @"AXReplacementText": text,
-        };
-    } else {
-        expected = [value stringByReplacingCharactersInRange:selected withString:text];
-    }
-    CFIndex caret = range.location + (CFIndex)text.length;
-    // Revalidate permission and editability after the value and selection reads.
-    error = check(binding);
+    error = dispatchError(binding);
     if (error) {
         finishWrite(error);
         return;
     }
-    // Safari will apply the supplied range even if the caret moved during authorization.
-    if (safariReplacement && !hasSameTextAndSelection(area, value, range)) {
-        finishWrite(selectionError);
-        return;
-    }
-    // Recheck window and field together after reading the field's state.
-    if (!hasBoundFocus(binding)) {
-        finishWrite(focusError);
-        return;
-    }
-    // Check modifiers again after the final cross-process read.
     if (shortcutHeld()) {
         writeAfter = CFAbsoluteTimeGetCurrent() + 0.08;
         return;
     }
-    if (![request isEqual:pendingRequest]) return;
-    if (releaseRequested()) {
-        finishWrite(focusError);
+    if (method == NativePaste) {
+        pasteText(binding, pendingRequest, pendingText);
         return;
     }
-    waitingForRelease = NO;
-    if (safariReplacement) {
-        // WebKit's range replacement uses a replacement fragment. AXTextOperation
-        // instead routes a collapsed range through a text event, which can submit.
+    if (method == RangeReplacement) {
+        // The native replacement supports line breaks as text. AXTextOperation
+        // can route them through a text event that submits a form.
         CFTypeRef result = NULL;
         AXError status = AXUIElementCopyParameterizedAttributeValue(area, replaceRange,
-            (__bridge CFDictionaryRef)safariReplacement, &result);
+            (__bridge CFDictionaryRef)replacement, &result);
         id accepted = CFBridgingRelease(result);
-        if (status != kAXErrorSuccess || ![accepted isEqual:@YES]) finishWrite(browserWriteError);
-        else verifySafariWrite(request, value, selected, CFAbsoluteTimeGetCurrent() + 0.6);
+        finishWrite(status == kAXErrorSuccess && [accepted isEqual:@YES] ? nil : writeError);
         return;
     }
-    // The write addresses the original element. No clipboard or keyboard event can reach a different field.
-    if (AXUIElementSetAttributeValue(area, kAXSelectedTextAttribute, (__bridge CFStringRef)text) != kAXErrorSuccess) {
-        finishWrite(writeError);
-        return;
-    }
-    verifyWrite(request, expected, caret, CFAbsoluteTimeGetCurrent() + 0.6);
+    AXError status = AXUIElementSetAttributeValue(area, kAXSelectedTextAttribute, (__bridge CFStringRef)pendingText);
+    finishWrite(status == kAXErrorSuccess ? nil : writeError);
 }
 
 static NSDictionary<NSString *, NSNumber *> *keys(void) {
@@ -500,7 +510,7 @@ static void handle(NSDictionary *message) {
             respond(request, permissionError);
             return;
         }
-        NSString *error = check(start);
+        NSString *error = check(start, NULL);
         if (!error) {
             bound = start;
             token = id;
@@ -552,7 +562,7 @@ static void readRequests(void (^receive)(NSDictionary *)) {
         @synchronized (releaseRequests) {
             inputClosed = YES;
         }
-        dispatch_async(dispatch_get_main_queue(), ^{ exit(0); });
+        dispatch_async(dispatch_get_main_queue(), ^{ requestExit(); });
     });
 }
 
@@ -572,6 +582,13 @@ int main(void) {
                 if (bound && pid != bound.pid) invalidate(bound, focusError);
             }];
 
+        // The host may terminate the helper on Quit while native paste is in flight.
+        signal(SIGTERM, SIG_IGN);
+        dispatch_source_t termination = dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGTERM, 0,
+                                                                dispatch_get_main_queue());
+        dispatch_source_set_event_handler(termination, ^{ requestExit(); });
+        dispatch_resume(termination);
+
         dispatch_source_t poll = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
         dispatch_source_set_timer(poll, dispatch_time(DISPATCH_TIME_NOW, 50 * NSEC_PER_MSEC), 50 * NSEC_PER_MSEC, 5 * NSEC_PER_MSEC);
         dispatch_source_set_event_handler(poll, ^{
@@ -583,6 +600,7 @@ int main(void) {
             dispatch_async(dispatch_get_main_queue(), ^{ handle(message); });
         });
         [NSApplication.sharedApplication run];
+        dispatch_source_cancel(termination);
     }
     return 0;
 }
