@@ -15,7 +15,10 @@ static BOOL trusted = YES, canPost = YES;
 static BOOL secureInput, protectedField, disabledField, readOnly, notEditable;
 static BOOL modifiers, sameWindow, noWindow, noField, systemField, noRole;
 static BOOL failSnapshot, failStage, failRestore, switchAfterStage, copyAfterStage, pauseAfterStage;
+static BOOL currentHostOnly;
 static dispatch_semaphore_t resumeFocus;
+static int64_t focusStallMs;
+static NSString *quitReport;
 static dispatch_block_t consumePaste, settlePaste;
 static uint64_t timeMs, consumeAt, settleAt;
 static const uint64_t targetReadDelayMs = 150;
@@ -37,6 +40,7 @@ static void emitMessage(NSDictionary *message);
 @end
 
 static void copyText(NSString *text) {
+    currentHostOnly = NO;
     [clipboard clearContents];
     assert([clipboard setString:text forType:NSPasteboardTypeString]);
 }
@@ -54,9 +58,12 @@ static void copyText(NSString *text) {
 + (instancetype)generalPasteboard { return [self new]; }
 - (NSInteger)changeCount { return clipboard.changeCount; }
 - (NSArray<NSPasteboardItem *> *)pasteboardItems { return failSnapshot ? nil : clipboard.pasteboardItems; }
-- (NSInteger)clearContents { return [clipboard clearContents]; }
+- (NSInteger)clearContents {
+    currentHostOnly = NO;
+    return [clipboard clearContents];
+}
 - (NSInteger)prepareForNewContentsWithOptions:(NSPasteboardContentsOptions)options {
-    assert(options == NSPasteboardContentsCurrentHostOnly);
+    currentHostOnly = (options & NSPasteboardContentsCurrentHostOnly) != 0;
     return [clipboard prepareForNewContentsWithOptions:options];
 }
 - (BOOL)writeObjects:(NSArray<id<NSPasteboardWriting>> *)objects {
@@ -100,6 +107,12 @@ static AXError copyFocus(AXUIElementRef element, CFArrayRef keys, AXCopyMultiple
     *values = CFBridgingRetain(focus);
     if (pauseAfterStage && [clipboard availableTypeFromArray:@[@"org.nspasteboard.TransientType"]]) {
         pauseAfterStage = NO;
+        if (focusStallMs) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, focusStallMs * NSEC_PER_MSEC),
+                           dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                dispatch_semaphore_signal(resumeFocus);
+            });
+        }
         emitMessage(@{@"focusReadPaused": @YES});
         assert(dispatch_semaphore_wait(resumeFocus, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
     }
@@ -208,6 +221,27 @@ static void advanceTime(uint64_t ms) {
 #undef main
 #undef NSPasteboard
 
+static NSDictionary *fixtureState(void) {
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSPasteboardItem *item in clipboard.pasteboardItems) {
+        NSMutableDictionary *formats = [NSMutableDictionary dictionary];
+        for (NSPasteboardType type in item.types) {
+            formats[type] = [type isEqual:NSPasteboardTypeString] || [type isEqual:NSPasteboardTypeHTML]
+                ? [item stringForType:type] : [[item dataForType:type] base64EncodedStringWithOptions:0];
+        }
+        [items addObject:formats];
+    }
+    return @{@"text": editors[0].string, @"other": editors[1].string, @"reads": reads,
+             @"keyDowns": @(keyDowns), @"keyUps": @(keyUps), @"clipboard": items,
+             @"currentHostOnly": @(currentHostOnly)};
+}
+
+static void reportQuit(void) {
+    if (!quitReport) return;
+    NSData *state = [NSJSONSerialization dataWithJSONObject:fixtureState() options:0 error:NULL];
+    assert([state writeToFile:quitReport atomically:YES]);
+}
+
 static void handleFixture(NSDictionary *message) {
     if (![message[@"action"] isEqual:@"fixture"]) {
         handle(message);
@@ -237,26 +271,16 @@ static void handleFixture(NSDictionary *message) {
     if (options[@"switchAfterStage"]) switchAfterStage = [options[@"switchAfterStage"] boolValue];
     if (options[@"copyAfterStage"]) copyAfterStage = [options[@"copyAfterStage"] boolValue];
     if (options[@"pauseAfterStage"]) pauseAfterStage = [options[@"pauseAfterStage"] boolValue];
+    if (options[@"focusStallMs"]) focusStallMs = [options[@"focusStallMs"] longLongValue];
+    if (options[@"quitReport"]) quitReport = options[@"quitReport"];
     if (options[@"copy"]) copyText(options[@"copy"]);
-    if ([options[@"clear"] boolValue]) [clipboard clearContents];
+    if ([options[@"clear"] boolValue]) [FixturePasteboard.generalPasteboard clearContents];
     if (options[@"advance"]) {
         advanceTime([options[@"advance"] unsignedLongLongValue]);
         insertWhenReleased();
     }
 
-    NSMutableArray *items = [NSMutableArray array];
-    for (NSPasteboardItem *item in clipboard.pasteboardItems) {
-        NSMutableDictionary *formats = [NSMutableDictionary dictionary];
-        for (NSPasteboardType type in item.types) {
-            formats[type] = [type isEqual:NSPasteboardTypeString] || [type isEqual:NSPasteboardTypeHTML]
-                ? [item stringForType:type] : [[item dataForType:type] base64EncodedStringWithOptions:0];
-        }
-        [items addObject:formats];
-    }
-    emitMessage(@{@"request": message[@"request"], @"fixture": @{
-        @"text": editors[0].string, @"other": editors[1].string, @"reads": reads,
-        @"keyDowns": @(keyDowns), @"keyUps": @(keyUps), @"clipboard": items,
-    }});
+    emitMessage(@{@"request": message[@"request"], @"fixture": fixtureState()});
 }
 
 int main(void) {
@@ -279,9 +303,11 @@ int main(void) {
         [first setString:@"<b>existing</b>" forType:NSPasteboardTypeHTML];
         NSPasteboardItem *second = [NSPasteboardItem new];
         [second setData:[NSData dataWithBytes:"\x00\xff" length:2] forType:@"net.example.binary"];
+        [FixturePasteboard.generalPasteboard prepareForNewContentsWithOptions:NSPasteboardContentsCurrentHostOnly];
         assert(([clipboard writeObjects:@[first, second]]));
         reads = [NSMutableArray array];
         resumeFocus = dispatch_semaphore_create(0);
+        assert(atexit(reportQuit) == 0);
         readRequests(^(NSDictionary *message) {
             // Run this signal on the stdin reader while the AX call is blocked.
             if ([message[@"action"] isEqual:@"resume-focus"]) dispatch_semaphore_signal(resumeFocus);
