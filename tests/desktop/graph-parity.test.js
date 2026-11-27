@@ -5,6 +5,10 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { _electron, expect } from '@playwright/test';
 import { edge, GRAPH_VERSION, graphNode } from '../../extension/graph.js';
+import { streamingTtsWorkerFixture, textProcessingWorkerFixture } from '../fixtures/inference-workers.js';
+import { moonshineWorkerFixture } from '../fixtures/moonshine-worker.js';
+import { observeSpeaker } from '../fixtures/speaker-observer.js';
+import { prepareInferenceFixtures } from './graph-inference-fixture.js';
 
 const executable = process.platform === 'darwin'
   ? 'dist/desktop/My Audio to Text.app/Contents/MacOS/my-audio-to-text'
@@ -16,6 +20,19 @@ const spec = (type, id, settings = {}, x = 20, y = 20) => {
   return node;
 };
 const graph = (nodes, edges) => ({ version: GRAPH_VERSION, nodes, edges });
+function modelGraph(type, settings = {}) {
+  const speech = type.startsWith('SpeechToText'), text = type.startsWith('TextProcessing');
+  const streaming = type.endsWith('Streaming'), clip = ['Kokoro', 'Supertonic3'].includes(type);
+  const source = speech ? spec('MicrophoneAudio', 'source') : spec('Text', 'source', { value: 'Test input' });
+  const sink = spec(streaming ? 'SpeakerOutput' : clip ? 'AudioOutput' : 'Display', 'output', speech ? { inputCount: 2 } : {});
+  const output = speech ? 'final' : text ? 'result' : streaming ? 'stream' : clip ? 'audio' : type === 'IfCondition' ? 'yes' : 'text';
+  return graph([source, spec(type, 'model', settings), sink], [
+    edge('source', speech ? 'audio' : 'value', 'model', speech ? 'audio' : text ? 'input1' : 'text'),
+    edge('model', output, 'output', streaming || clip ? 'audio' : 'input1'),
+    ...(speech ? [edge('model', 'provisional', 'output', 'input2')] : []),
+  ]);
+}
+
 const get = page => page.evaluate(() => window.desktop.get());
 const phase = async (page, expected) => {
   await expect.poll(async () => (await get(page)).session.phase).toBe(expected);
@@ -113,17 +130,7 @@ test('packaged desktop constructs each AI Node and loads each production Worker 
     ['Kokoro', 'kokoro-worker', 'kokoro:af_heart', { cacheOnly: true, voice: 'af_heart' }],
     ['Qwen3TtsStreaming', 'qwen3-tts-worker', 'qwen3-tts'],
     ['CosyVoice3Streaming', 'cosyvoice3-worker', 'cosyvoice3'],
-  ].map(([type, worker, key, settings]) => {
-    const speech = type.startsWith('SpeechToText'), text = type.startsWith('TextProcessing');
-    const streaming = type.endsWith('Streaming'), clip = ['Kokoro', 'Supertonic3'].includes(type);
-    const source = spec(speech ? 'MicrophoneAudio' : 'Text', 'source');
-    const sink = spec(streaming ? 'SpeakerOutput' : clip ? 'AudioOutput' : 'Display', 'output');
-    return { worker, key, settings, graph: graph([source, spec(type, 'model', type === 'Kokoro' ? { voice: 'af_heart' } : {}), sink], [
-      edge('source', speech ? 'audio' : 'value', 'model', speech ? 'audio' : text ? 'input1' : 'text'),
-      edge('model', speech ? 'final' : text ? 'result' : streaming ? 'stream' : clip ? 'audio' : type === 'IfCondition' ? 'yes' : 'text',
-        'output', streaming || clip ? 'audio' : 'input1'),
-    ]) };
-  });
+  ].map(([type, worker, key, settings]) => ({ worker, key, settings, graph: modelGraph(type, type === 'Kokoro' ? { voice: 'af_heart' } : {}) }));
   const results = await runtime.evaluate(async models => {
     const { buildGraph } = await import('/extension/graph-runtime.js');
     const { graphModelRequirements } = await import('/extension/graph-model-preparation.js');
@@ -155,6 +162,69 @@ test('packaged desktop constructs each AI Node and loads each production Worker 
     assert.match(actual.result.message, /(?:missing|evicted|WebGPU|WebAssembly JSPI|not (?:downloaded|prepared))/i, key);
     assert.doesNotMatch(actual.result.message, /can't find|failed to fetch|Worker script|requires an extension/i, key);
   }
+});
+
+test('packaged desktop delivers deterministic inference through Live Display, Audio player and Speaker', { timeout: 60000 }, async t => {
+  const { app, page, runtime } = await launch(t);
+  const replyTo = (request, result) => `self.onmessage = ({ data: { type, id, text } }) => {
+    if (type === 'load') postMessage({ type: 'ready', id });
+    if (type === '${request}') postMessage({ type: 'result', id, ${result} });
+    if (type === 'drain') postMessage({ type: 'drained', id });
+  };`;
+  const models = [
+    ['SpeechToTextMoonshineMediumEn', 'moonshine-medium-en', 'moonshine-medium', moonshineWorkerFixture()],
+    ['TranslateGemma4B', 'translategemma', 'translategemma', replyTo('translate', 'texts: [text + " translated by Gemma"]'), 'Test input translated by Gemma'],
+    ['Plamo3Translate2B', 'plamo-3-translate-2b', 'plamo', replyTo('translate', 'texts: [text + " translated by PLaMo"]'), 'Test input translated by PLaMo', 'plamo'],
+    ['TextProcessingQwen35', 'meeting-summary-qwen35', 'text-summary', textProcessingWorkerFixture, 'Ready summary'],
+    ['Supertonic3', 'supertonic3:F1', 'supertonic3', replyTo('generate',
+      'audio: { samples: new Float32Array(4410).fill(.25), sampleRate: 44100, channels: 1 }'), null, 'supertonic3'],
+    ['Qwen3TtsStreaming', 'qwen3-tts', 'qwen3-tts', streamingTtsWorkerFixture],
+    ['CosyVoice3Streaming', 'cosyvoice3', 'cosyvoice3', streamingTtsWorkerFixture],
+  ].map(([type, key, worker, script, expected, manifest = key]) => ({ type, key, worker, script, expected, manifest, graph: modelGraph(type) }));
+  await prepareInferenceFixtures(app, runtime, models);
+  await runtime.evaluate(observeSpeaker);
+
+  const start = page.getByRole('button', { name: 'Start', exact: true });
+  const stop = page.getByRole('button', { name: 'Stop', exact: true });
+  const item = port => expect.poll(async () => (await get(page)).items.find(item => item.node === 'output' && item.port === port)?.item);
+  for (const { type, graph, expected } of models) await t.test(type, async () => {
+    await addLive(page, type, graph);
+    await runtime.evaluate(() => { window.speakerEvents.length = 0; });
+    try {
+      await start.click();
+      await phase(page, 'running');
+      if (type === 'SpeechToTextMoonshineMediumEn') {
+        await item('input2').toBe('pending fixture');
+      } else if (type === 'Supertonic3') {
+        const player = page.getByLabel('Generated speech · output');
+        await expect(player).toBeVisible();
+        await expect.poll(() => player.evaluate(audio => audio.duration)).toBeCloseTo(.1, 3);
+        const [{ node, audio }] = await page.evaluate(() => window.desktop.audio());
+        assert.equal(node, 'output');
+        assert.equal(audio.sampleRate, 44100);
+        assert.equal(audio.channels, 1);
+        assert.deepEqual(audio.samples, new Float32Array(4410).fill(.25));
+      } else if (type.endsWith('Streaming')) {
+        const scheduled = () => runtime.evaluate(() => window.speakerEvents.filter(event => event.type === 'start'));
+        await expect.poll(async () => (await scheduled()).length).toBe(3);
+        assert.ok((await scheduled()).every(event => Math.abs(event.duration - .1) < .001));
+      } else {
+        await item('input1').toBe(expected);
+        await expect(page.getByRole('tabpanel')).toContainText(expected);
+      }
+      assert.deepEqual((await get(page)).nodeStatus.filter(status => status.severity === 'error'), []);
+      await stop.click();
+      await phase(page, 'idle');
+      if (type === 'SpeechToTextMoonshineMediumEn') {
+        await item('input1').toBe('confirmed fixture');
+        await item('input2').toBe('');
+      }
+      const view = await get(page);
+      assert.equal(view.session.error, '');
+    } finally {
+      if ((await get(page)).session.phase !== 'idle') await page.evaluate(() => window.desktop.cancel());
+    }
+  });
 });
 
 test('packaged model preparation rejects foreign requests, cancels, retries and detects corrupt pinned bytes', {
@@ -200,6 +270,26 @@ test('packaged model preparation rejects foreign requests, cancels, retries and 
   assert.match(corrupt.error, /Incomplete asset|Incorrect size|Corrupt asset/);
   assert.equal((await page.evaluate(key => window.desktop.model('modelStatus', key), active)).state, 'Not downloaded');
   assert.equal((await page.evaluate(key => window.desktop.model('modelStatus', key), other)).state, 'Not downloaded');
+});
+
+test('packaged Kokoro Worker initializes Open JTalk from its prepared Japanese voice', { timeout: 45000 }, async t => {
+  const { app, page, runtime } = await launch(t);
+  const voice = await page.evaluate(() => window.desktop.model('modelPrepare', 'kokoro-japanese'));
+  assert.equal(voice.state, 'Ready', voice.error);
+  await app.evaluate(() => {
+    globalThis.fetch = () => { throw Error('Voice preparation is already complete'); };
+  });
+
+  const workerReady = runtime.waitForEvent('worker', { timeout: 5000 });
+  await runtime.evaluate(() => { window.kokoroWorker = new Worker('/web/kokoro-worker.js', { type: 'module' }); });
+  const worker = await workerReady;
+  const phonemes = await worker.evaluate(async () => {
+    const { createJapanesePhonemizer } = await import('/web/kokoro-japanese.js');
+    const phonemize = await createJapanesePhonemizer();
+    return phonemize('こんにちは。');
+  });
+  assert.match(phonemes, /^k.+[.!?]$/);
+  await runtime.evaluate(() => window.kokoroWorker.terminate());
 });
 
 test('packaged desktop runs prepared CPU and WebGPU models offline and saves real speech as WAV', {

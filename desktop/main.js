@@ -210,9 +210,12 @@ async function installProtocol() {
     if (url.host !== 'desktop' || request.method !== 'GET' || !path.startsWith(root + sep) || !contentType
         || !/^\/(desktop|extension|web)\//.test(url.pathname)) return new Response(null, { status: 404 });
     try {
+      // Open JTalk accepts a URL for the voice bytes read from verified storage.
+      const policy = url.pathname === '/web/kokoro-worker.js'
+        ? csp.replace("connect-src 'self'", "connect-src 'self' blob:") : csp;
       return new Response(await readFile(path), { headers: {
         'Content-Type': contentType,
-        'Content-Security-Policy': csp,
+        'Content-Security-Policy': policy,
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
         'X-Content-Type-Options': 'nosniff',

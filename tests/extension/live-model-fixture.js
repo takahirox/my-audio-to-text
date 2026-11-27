@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { graphNode, edge, GRAPH_VERSION } from '../../extension/graph.js';
 import { installAssetQuotaFixture } from './model-asset-worker-fixture.js';
+import { textProcessingWorkerFixture } from '../fixtures/inference-workers.js';
 
 export function summaryGraph() {
   const source = graphNode('Text', 'source'); source.settings.value = 'Evidence';
@@ -51,11 +52,7 @@ export async function liveModelFixture() {
       sha256Chunks: [createHash('sha256').update(body).digest('hex')],
       sourceURL: `http://127.0.0.1:${server.address().port}/${name}` }));
     await writeFile(path.join(root, 'extension/meeting-summary-lfm2-assets.json'), JSON.stringify(files));
-    await writeFile(path.join(root, 'web/text-summary-worker.js'), `self.onmessage=({data})=>{
-      if(data.type==='load')postMessage({type:'ready',id:data.id});
-      if(data.type==='process')postMessage({type:'result',id:data.id,result:'Ready summary'});
-      if(data.type==='drain')postMessage({type:'drained',id:data.id});
-    };`);
+    await writeFile(path.join(root, 'web/text-summary-worker.js'), textProcessingWorkerFixture);
     context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), { channel: 'chromium', headless: true,
       ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'] });
     await context.route('https://huggingface.co/**', route => route.abort('blockedbyclient'));
