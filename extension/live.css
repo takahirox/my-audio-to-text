@@ -43,9 +43,8 @@ body.live-page {
 .live-page .actions button { min-height: 44px; font-size: .95rem; }
 .live-page .actions button span { margin-right: .3rem; font-size: .85em; }
 .live-page #floating-text {
-  position: fixed; inset-inline-end: .8rem; bottom: .8rem; z-index: 1;
-  box-sizing: border-box; width: max-content; max-width: min(24rem, calc(100vw - 1.6rem)); max-height: min(6rem, 40vh);
-  margin: 0; padding: .45rem .7rem; border: 1px solid var(--border); border-radius: 8px;
+  box-sizing: border-box; width: max-content; max-width: min(24rem, 100%); max-height: min(6rem, 40vh);
+  margin: .55rem 0 0; padding: .45rem .7rem; border: 1px solid var(--border); border-radius: 8px;
   background: #fff; box-shadow: 0 2px 8px #30234220;
   white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; pointer-events: none;
 }
