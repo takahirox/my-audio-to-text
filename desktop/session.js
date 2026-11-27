@@ -12,7 +12,7 @@ export class DesktopSession {
 
   async start(plan) {
     if (this.current) return;
-    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map(), floatingText: '', status: new Map() };
+    const session = { id: crypto.randomUUID(), plan, microphone: plan.microphone, queue: Promise.resolve(), admitted: false, displays: new Map(), floatingText: '', status: new Map() };
     this.current = session;
     this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays, actions: plan.actions, id: session.id });
     try {
@@ -21,7 +21,7 @@ export class DesktopSession {
       session.admitted = true;
       await this.run('start', session.id, plan.graph);
       if (this.current === session && this.state.phase === 'preparing') {
-        this.update({ phase: 'running', microphone: plan.microphone });
+        this.update({ phase: 'running', microphone: session.microphone });
       }
     } catch (error) { await this.cancel(error.message, session.id); }
   }
@@ -94,9 +94,11 @@ export class DesktopSession {
     return pending;
   }
 
-  captureEnded(id) {
-    if (this.current?.id !== id) return;
-    this.update({ microphone: false });
+  captureEnded(id, error) {
+    const session = this.current;
+    if (session?.id !== id || !session.admitted) return;
+    session.microphone = false;
+    this.update({ microphone: false, ...(error && { error }) });
   }
 
   display(id, node, port, item, provisional) {

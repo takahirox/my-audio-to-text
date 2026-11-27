@@ -257,18 +257,30 @@ const mediumAsr = {
   key: 'moonshine-medium-en', worker: 'moonshine-medium', manifest: 'moonshine-medium-en',
   script: moonshineWorkerFixture(), graph: modelGraph('SpeechToTextMoonshineMediumEn'),
 };
+const japaneseAsr = {
+  key: 'moonshine-small-ja', worker: 'moonshine-small-ja', manifest: 'moonshine-small-ja',
+  script: moonshineWorkerFixture(), graph: modelGraph('SpeechToTextMoonshineSmallJa'),
+};
 
-test('packaged desktop reports a failed ASR branch and keeps an independent focused action running', {
-  timeout: 30000,
-}, async t => {
-  const { app, page, runtime } = await launch(t);
-  await prepareInferenceFixtures(app, runtime, [mediumAsr]);
-  await runtime.evaluate(() => {
+async function shortcutInference(app, page, runtime, models) {
+  await prepareInferenceFixtures(app, runtime, models);
+  await runtime.evaluate(async () => {
+    const { Microphone } = await import('/web/audio.js');
+    // Use the real capture lifecycle with synthetic media tracks.
+    delete Microphone.prototype.start;
+    window.captureTracks = [];
+    Microphone.prototype.getMedia = function () {
+      const { stream } = this.context.createMediaStreamDestination();
+      window.captureTracks.push(...stream.getAudioTracks());
+      return stream;
+    };
     const NativeWorker = window.Worker;
+    window.moonshineWorkers = {};
     window.Worker = class extends NativeWorker {
       constructor(url, options) {
         super(url, options);
-        if (url.pathname.endsWith('/moonshine-medium-worker.js')) window.mediumWorker = this;
+        const worker = url.pathname.match(/\/(moonshine-[\w-]+)-worker\.js$/)?.[1];
+        if (worker) window.moonshineWorkers[worker] = this;
       }
     };
   });
@@ -284,27 +296,70 @@ test('packaged desktop reports a failed ASR branch and keeps an independent focu
       return request.call(this, action, token, text);
     };
   });
+  const shortcut = 'Control+Alt+Shift+F8';
+  await page.evaluate(value => window.desktop.shortcut(value), shortcut);
+  return {
+    start: () => app.evaluate((_electron, shortcut) => globalThis.releaseTestShortcut(shortcut), shortcut),
+    fail: worker => runtime.evaluate(key => window.moonshineWorkers[key].postMessage({ type: 'fixture-error' }), worker),
+    tracks: () => runtime.evaluate(() => window.captureTracks.map(track => track.readyState)),
+    indicator: app.windows().find(page => page.url().endsWith('/indicator.html')),
+  };
+}
+
+test('packaged desktop stops default shortcut dictation, releases capture and shows the fatal Japanese ASR error', {
+  timeout: 30000,
+}, async t => {
+  const { app, page, runtime } = await launch(t);
+  const shortcut = await shortcutInference(app, page, runtime, [japaneseAsr]);
+  await shortcut.start();
+  await phase(page, 'running');
+  await expect(shortcut.indicator.locator('#state')).toHaveText('Recording');
+  assert.deepEqual(await shortcut.tracks(), ['live']);
+
+  await shortcut.fail(japaneseAsr.worker);
+  await expect(shortcut.indicator.locator('#state')).toContainText('Controlled worker failure');
+  await phase(page, 'idle');
+  await expect(shortcut.indicator.locator('body')).toHaveAttribute('data-recording', 'false');
+  assert.deepEqual(await shortcut.tracks(), ['ended']);
+  assert.deepEqual(await app.evaluate(() => globalThis.testInsertions), []);
+});
+
+test('packaged desktop releases capture after the last ASR route fails and keeps an independent focused action running', {
+  timeout: 30000,
+}, async t => {
+  const { app, page, runtime } = await launch(t);
+  const shortcut = await shortcutInference(app, page, runtime, [mediumAsr, japaneseAsr]);
   const mixed = graph([...mediumAsr.graph.nodes,
     spec('Text', 'phrase', { value: 'Independent text' }), spec('Button', 'action', { label: 'Insert text' }),
     spec('Hold', 'hold'), spec('FocusedInputTextOutputNode', 'focused'),
+    spec('SpeechToTextMoonshineSmallJa', 'japanese'), spec('Display', 'japanese-output'),
   ], [...mediumAsr.graph.edges,
     edge('phrase', 'value', 'hold', 'input'), edge('action', 'trigger', 'hold', 'trigger'),
     edge('hold', 'value', 'focused', 'text'),
+    edge('source', 'audio', 'japanese', 'audio'), edge('japanese', 'final', 'japanese-output', 'input1'),
   ]);
-  const shortcut = 'Control+Alt+Shift+F8';
-  await page.evaluate(async ({ mixed, shortcut }) => {
+  await page.evaluate(async mixed => {
     const entry = await window.desktop.add('Mixed dictation and action', mixed);
     await window.desktop.select(entry.id);
-    await window.desktop.shortcut(shortcut);
-  }, { mixed, shortcut });
+  }, mixed);
   await page.getByRole('button', { name: 'Live', exact: true }).click();
-  await app.evaluate((_electron, shortcut) => globalThis.releaseTestShortcut(shortcut), shortcut);
+  await shortcut.start();
   await phase(page, 'running');
   const action = page.getByRole('button', { name: 'Insert text' });
   await expect(action).toBeEnabled();
 
-  await runtime.evaluate(() => window.mediumWorker.postMessage({ type: 'fixture-error' }));
+  await shortcut.fail(mediumAsr.worker);
   await expect(page.locator('#node-status [data-severity="error"]')).toHaveText(/model · .*Controlled worker failure/);
+  await expect(shortcut.indicator.locator('#state')).toHaveText('Recording');
+  assert.deepEqual(await shortcut.tracks(), ['live']);
+  await runtime.evaluate(key => window.moonshineWorkers[key].postMessage({ type: 'fixture-final', id: 0, text: 'Remaining route' }), japaneseAsr.worker);
+  await expect.poll(async () => (await get(page)).items.find(item => item.node === 'japanese-output')?.item).toBe('Remaining route');
+
+  await shortcut.fail(japaneseAsr.worker);
+  await expect(shortcut.indicator.locator('#state')).toContainText('Controlled worker failure');
+  await expect(shortcut.indicator.locator('body')).toHaveAttribute('data-recording', 'false');
+  await expect(page.locator('#live-state')).toHaveText('Running');
+  assert.deepEqual(await shortcut.tracks(), ['ended']);
   assert.equal((await get(page)).session.phase, 'running');
   await action.click();
   await expect.poll(() => app.evaluate(() => globalThis.testInsertions)).toEqual(['Independent text']);
