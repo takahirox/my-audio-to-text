@@ -36,7 +36,8 @@ const test = base.extend({
         // Insertion assertions recognize one utterance, regardless of Chromium's fake
         // microphone tone/silence cycle or how long placement checks take.
         const singleUtterance = /^(active recording stays|closed-shadow modal|stacked modal dialogs)/.test(info.title);
-        for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture());
+        const options = info.title.startsWith('Floating Display shows') ? { partial: null } : {};
+        for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture(options));
       }
       if (info.title.includes('transport measurements')) {
         // Opt into the production worklet timestamps for the concurrent Live
@@ -197,12 +198,14 @@ async function inspectControl(t, focus = false) {
     const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, arguments:[{ value:focus }],
       functionDeclaration: `function(focus) {
         const button = this.querySelector('button'), svg = button.querySelector('svg'), status = this.querySelector('span');
+        const preview = this.querySelector('.floating-text');
         if (focus) button.focus();
         const style = getComputedStyle(button), motion = getComputedStyle(svg);
         const rect = element => { const r = element.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height }; };
         return { icon:svg.dataset.icon, path:svg.firstChild.getAttribute('d'), viewBox:svg.getAttribute('viewBox'),
           ariaHidden:svg.getAttribute('aria-hidden'), focusable:svg.getAttribute('focusable'), text:button.textContent,
           label:button.getAttribute('aria-label'), title:button.title, disabled:button.disabled, status:status.textContent,
+          preview:{ text:preview.textContent, elements:preview.childElementCount, box:rect(preview) },
           button:rect(button), svg:rect(svg), bubble:rect(status), bubbleClip:getComputedStyle(status).clipPath, theme:this.host.dataset.theme,
           circle:style.borderRadius, display:style.display, align:style.alignItems, justify:style.justifyContent,
           padding:style.padding, boxSizing:style.boxSizing, appearance:style.appearance, lineHeight:style.lineHeight,
@@ -952,6 +955,85 @@ test('already granted input and textarea dictation stays in place, drains exactl
   await writeFile(info.outputPath('offscreen-voice-evidence.json'), JSON.stringify({ realModel: real,
     ...(await realEvidence(t)), browser: t.context.browser().version(), microphone: 'native gUM, fake device, CDP permission grant; native bubble buttons not automated',
     evidence, remoteRequests: t.remote, errors: t.pageErrors }, null, 2));
+});
+
+test('Floating Display shows the page session’s latest text and clears while final insertion drains', async ({ voice: t }) => {
+  test.skip(real);
+  await t.library.evaluate(async id => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge } = await import('./graph.js');
+    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    entry.graph.nodes.push(graphNode('FloatingDisplay', 'preview'));
+    entry.graph.edges.push(edge('asr', 'provisional', 'preview', 'text'));
+    await new GraphLibrary(localStorage).save(id, entry.revision, entry.graph);
+  }, t.graphId);
+  await enable(t);
+  await t.website.setViewportSize({ width: 360, height: 190 });
+  await start(t); await recording(t);
+  const r = await runtime(t);
+  try {
+    expect(await r.evaluate(() => voiceResources.workers.filter(worker => !worker.released).length)).toBe(1);
+    const emit = (type, id, text) => r.evaluate(message => {
+      voiceResources.workers.find(worker => !worker.released).postMessage(message);
+    }, { type, id, text });
+    const snapshot = async () => (await inspectControl(t)).preview.text;
+    await emit('fixture-partial', 0, 'first hypothesis');
+    await expect.poll(snapshot).toBe('first hypothesis');
+    const text = '<b>東京🙂</b> '.repeat(55).trim();
+    await emit('fixture-partial', 0, text);
+    await expect.poll(snapshot).toBe(text);
+    const ui = await inspectControl(t);
+    expect(ui.preview.elements).toBe(0);
+    expect(ui.preview.box.height).toBeGreaterThan(0);
+    expect(ui.preview.box.height).toBeLessThanOrEqual(84);
+    expect(ui.preview.box.x).toBeGreaterThanOrEqual(0);
+    expect(ui.preview.box.y).toBeGreaterThanOrEqual(0);
+    expect(ui.preview.box.x + ui.preview.box.width).toBeLessThanOrEqual(360);
+    expect(ui.preview.box.y + ui.preview.box.height).toBeLessThanOrEqual(190);
+    expect(intersects(ui.preview.box, ui.button)).toBe(false);
+    expect(intersects(ui.preview.box, ui.bubble)).toBe(false);
+    await expect(t.website.locator('#first')).toBeFocused();
+    await expect(t.website.locator('#first')).toHaveValue('before after');
+
+    await emit('fixture-final', 0, 'committed ');
+    await expect.poll(snapshot).toBe('');
+    await expect(t.website.locator('#first')).toHaveValue('before committed after');
+    await emit('fixture-partial', 1, 'before Stop');
+    await expect.poll(snapshot).toBe('before Stop');
+    await stop(t); await idle(t);
+    expect(await snapshot()).toBe('');
+
+    await start(t, '#second'); await recording(t);
+    expect(await snapshot()).toBe('');
+    await toolbarVoice(t, false); await idle(t);
+    await expect(widget(t.website)).toHaveCount(0);
+  } finally { await r.detach(); }
+});
+
+test('Floating Display renders a plain Text source during extension Live', async ({ voice: t }) => {
+  test.skip(real);
+  const id = await t.library.evaluate(async () => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge, GRAPH_VERSION } = await import('./graph.js');
+    const literal = graphNode('Text', 'literal');
+    literal.settings.value = '<b>Live text</b>';
+    const graph = { version: GRAPH_VERSION, nodes: [literal, graphNode('FloatingDisplay', 'preview')],
+      edges: [edge('literal', 'value', 'preview', 'text')] };
+    const next = await new GraphLibrary(localStorage).create({ name: 'Floating preview', graph }, readLibrary(localStorage).revision);
+    return next.graphs.at(-1).id;
+  });
+  const live = await t.context.newPage();
+  await live.goto(t.url + 'recorder.html?graph=' + id);
+  await expect(live.locator('#model-status')).toHaveText('Ready');
+  const preview = live.locator('#floating-text');
+  await expect(preview).toBeHidden();
+  await live.locator('#start').click();
+  await expect(preview).toHaveText('<b>Live text</b>');
+  await expect(preview).toBeVisible();
+  await expect(preview.locator('b')).toHaveCount(0);
+  await live.locator('#stop').click();
+  await expect(preview).toBeEmpty();
+  await expect(preview).toBeHidden();
 });
 
 test('first site grant and already granted capture create zero visible pages', async ({ voice: t }) => {

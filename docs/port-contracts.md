@@ -45,6 +45,13 @@ final-only ASRs also expose `finalId`. Translation accepts independent or atomic
 (or no ID) per job. Any finite NUMBER producer can supply these optional IDs. KeyedTextPair associates both branches by numeric ID; the pair accumulator preserves first-seen row order with no stage priority. See the [continuous ASR wiring and lifecycle
 contract](display-items.md). Ordinary ID-less TEXT processors remain supported.
 
+## Floating Display
+
+Floating Display is a sink with one `text: TEXT` input. Each delivery
+replaces the visible snapshot, including repeated values and the empty string.
+The host renders the string as plain text and clears the snapshot when the
+session ends. The sink uses the same contract for provisional and committed TEXT.
+
 ## Correlated translation primitives
 
 The extension scheduler accepts committed `text` and optional `provisional` TEXT. Each successful utterance

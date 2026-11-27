@@ -20,7 +20,7 @@ EXTENSION = (
     "moonshine-small-ja-assets.json optional-asr-cache.js model-asset-cache.js icons/icon-32.png"
 ).split()
 WEB = (
-    "audio.js audio-stream.js button-node.js capture-worklet.js display-node.js hold-node.js if-condition-policy.js "
+    "audio.js audio-stream.js button-node.js capture-worklet.js display-node.js floating-display-node.js hold-node.js if-condition-policy.js "
     "moonshine-small-ja-node.js moonshine-stream.js moonshine-worker.js number-node.js optional-asr-core.js "
     "optional-asr-node.js optional-model-assets.js paired-text.js pipeline.js port-contracts.js speaker-output.js "
     "synthesized-audio.js text-constant-node.js text-nodes.js text-summary-policy.js text-window-node.js "

@@ -1,21 +1,24 @@
 import { assertGraph, executableGraph, ASR_TYPES } from './graph.js';
 import { resolveSubgraphs } from './subgraphs.js';
 
-// Run only the assigned field sink and its complete ancestors. Optional Live,
-// speaker and other output branches never run in the page-mic workflow.
+// Run the field and floating displays with their complete ancestors.
 export function webVoiceGraph(value) {
   const graph = executableGraph(assertGraph(value));
   if (graph.nodes.some(n => n.type === 'ChromeTabAudio')) throw Error('Web voice typing cannot run tab capture. Use a microphone-only graph.');
   const sinks = graph.nodes.filter(n => n.type === 'FocusedInputTextOutputNode');
   if (sinks.length !== 1) throw Error('Connect one executable MicrophoneAudio → ASR final → FocusedInputTextOutputNode path in Graph Editor.');
-  const needed = new Set(), pending = [sinks[0].id];
-  while (pending.length) {
-    const id = pending.pop();
-    if (needed.has(id)) continue;
-    needed.add(id);
-    for (const e of graph.edges) if (e.to[0] === id) pending.push(e.from[0]);
-  }
-  const nodes = graph.nodes.filter(n => needed.has(n.id)), edges = graph.edges.filter(e => needed.has(e.from[0]) && needed.has(e.to[0]));
+  const ancestors = pending => {
+    const needed = new Set();
+    while (pending.length) {
+      const id = pending.pop();
+      if (needed.has(id)) continue;
+      needed.add(id);
+      for (const e of graph.edges) if (e.to[0] === id) pending.push(e.from[0]);
+    }
+    return needed;
+  };
+  const field = ancestors([sinks[0].id]);
+  const nodes = graph.nodes.filter(n => field.has(n.id)), edges = graph.edges.filter(e => field.has(e.to[0]));
   const allowed = new Set(['MicrophoneAudio', ...ASR_TYPES, 'FocusedInputTextOutputNode', 'TextFormatter', 'TextWindow',
     'TranslateGemma4B', 'Plamo3Translate2B', 'IfCondition', 'TextProcessingLfm2', 'TextProcessingQwen35', 'Text', 'Number']);
   const unsupported = nodes.find(n => !allowed.has(n.type));
@@ -31,7 +34,10 @@ export function webVoiceGraph(value) {
     for (const e of edges) if (reachable.has(e.from[0]) && !reachable.has(e.to[0])) { reachable.add(e.to[0]); changed = true; }
   }
   if (!reachable.has(sinks[0].id)) throw Error('The field output needs a complete typed path from MicrophoneAudio. No Live graph is substituted.');
-  return { ...graph, nodes, edges };
+  const displays = ancestors(graph.nodes.filter(n => n.type === 'FloatingDisplay').map(n => n.id));
+  if (graph.nodes.some(n => displays.has(n.id) && n.type === 'Button')) throw Error('Button actions on a Floating Display path require Live.');
+  const included = id => field.has(id) || displays.has(id);
+  return { ...graph, nodes: graph.nodes.filter(n => included(n.id)), edges: graph.edges.filter(e => included(e.to[0])) };
 }
 export function webVoiceError(value) { try { webVoiceGraph(value); return ''; } catch (error) { return error.message; } }
 

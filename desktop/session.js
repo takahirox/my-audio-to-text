@@ -1,7 +1,7 @@
 // The main process authorizes focused TEXT delivery from Start through the Stop drain.
 export class DesktopSession {
-  constructor({ target, run, onChange, onDisplay }) {
-    Object.assign(this, { target, run, onChange, onDisplay });
+  constructor({ target, run, onChange, onDisplay, onFloatingDisplay }) {
+    Object.assign(this, { target, run, onChange, onDisplay, onFloatingDisplay });
     this.state = { phase: 'idle', error: '', microphone: false };
   }
 
@@ -12,7 +12,7 @@ export class DesktopSession {
 
   async start(plan) {
     if (this.current) return;
-    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map() };
+    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map(), floatingText: '' };
     this.current = session;
     this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays });
     try {
@@ -34,6 +34,7 @@ export class DesktopSession {
   async stop() {
     const session = this.current;
     if (!session || this.state.phase !== 'running') return;
+    session.floatingText = '';
     this.update({ phase: 'stopping' });
     try {
       await this.run('stop', session.id);
@@ -47,6 +48,7 @@ export class DesktopSession {
     if (!session || session.id !== id || this.state.phase === 'canceling') return session?.canceling;
     const started = session.admitted;
     session.admitted = false;
+    session.floatingText = '';
     // Restore the last committed snapshot before publishing cancellation.
     // Cleanup and ordinary deliveries from the canceled runtime stay closed.
     for (const { node, port, committed, provisional } of session.displays.values()) {
@@ -105,5 +107,13 @@ export class DesktopSession {
       session.displays.set(key, { node, port, committed, provisional });
       this.onDisplay({ node, port, item });
     }
+  }
+
+  floatingDisplay(id, text) {
+    const session = this.current;
+    if (!session?.admitted || session.id !== id || this.state.phase === 'stopping'
+        || typeof text !== 'string' || text === session.floatingText) return;
+    session.floatingText = text;
+    this.onFloatingDisplay(text);
   }
 }

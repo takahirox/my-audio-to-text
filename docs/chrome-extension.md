@@ -400,17 +400,30 @@ Page scripts cannot address these extension-only ports, read isolated-world vari
 or synthesize trusted mic clicks; there is no new `window.postMessage` bridge. Sites
 can still alter the shared DOM or read text inserted into their own fields, as before.
 
-The assigned graph is snapshotted at session start. Only **one executable
-FocusedInputTextOutputNode and its complete typed ancestors** run; optional Live,
-speaker or other output branches are omitted, not initialized. Any executable
-ChromeTabAudio path makes a graph incompatible. The
-eligible field path starts at MicrophoneAudio, passes through an existing ASR's
+The assigned graph is snapshotted at session start. Web voice typing runs one
+executable **Focused input text output**, any connected **Floating Display**
+nodes, and their complete typed ancestors in the same Pipeline. Unrelated
+Live Display, speaker and other output branches are skipped. Any executable
+ChromeTabAudio path makes a graph incompatible. The eligible field path starts
+at MicrophoneAudio, passes through an existing ASR's
 `final`, and may use TextFormatter, TextWindow, TranslateGemma, PLaMo or
 IfCondition or the existing text-summary Nodes. Number configuration and Text→ASR language / translation context configuration are allowed.
-Provisional/diagnostic output paths, startup text, multiple field sinks, cumulative
-snapshot processors and trigger/sampled paths are rejected with reasons. This
-conservative subset prevents startup/repeated snapshot edits and unrelated side
-effects; it does not change general Graph/Live semantics or schema/ports.
+The field path rejects provisional and diagnostic outputs, startup TEXT,
+multiple field sinks, cumulative snapshot processors and trigger/sampled paths.
+
+#### Show a dictation preview
+
+In Graph Editor, connect **Microphone audio** to a streaming **Speech Recognition**
+node. Connect its `final` output to **Focused input text output** and its
+`provisional` output to **Floating Display**, both at `text`. Choose the saved
+graph from the page mic. While you speak, the latest hypothesis appears beside
+the mic. The final result goes into the field. An empty string clears the
+preview, and stopping clears it immediately.
+
+Floating Display also accepts TEXT from processors such as TextFormatter and
+translation. In Live, the same node shows text in a small overlay during the
+session. Graphs with Button actions driving a Floating Display run in Live,
+where those actions are available.
 
 Model preparation uses #239's actual runtime initialization with verified local
 cached/package assets. Missing files/GPU support fail visibly with Models/Graph

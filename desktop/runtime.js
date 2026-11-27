@@ -5,6 +5,7 @@ import { SpeechToTextMoonshineSmallJaNode } from '../web/moonshine-small-ja-node
 import { TextFormatterNode } from '../web/text-nodes.js';
 import { TextNode } from '../web/text-constant-node.js';
 import { displayInputs } from '../web/display-node.js';
+import { FloatingDisplayNode } from '../web/floating-display-node.js';
 import { snapshotItem } from '../web/paired-text.js';
 import { ModelAssetCache } from '../extension/model-asset-cache.js';
 import { moonshineJapaneseManifest } from '../extension/optional-asr-cache.js';
@@ -82,6 +83,7 @@ async function start(id, graph) {
       case 'Display': return new DesktopDisplayNode(settings, (port, item, provisional) => {
         if (session.active) host.display(id, node, port, item, provisional);
       });
+      case 'FloatingDisplay': return new FloatingDisplayNode(text => host.floatingDisplay(id, text));
       case FOCUSED_OUTPUT: return new FocusedApplicationTextOutputNode(text => host.insert(id, text));
       default: throw Error(`Unsupported desktop Node: ${type}.`);
     }

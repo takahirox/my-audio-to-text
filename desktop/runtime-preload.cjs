@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld('runtimeHost', {
   failure: (id, message) => ipcRenderer.send('runtime:failure', id, message),
   captureEnded: id => ipcRenderer.send('runtime:capture-ended', id),
   display: (id, node, port, item, provisional) => ipcRenderer.send('runtime:display', id, node, port, item, provisional),
+  floatingDisplay: (id, text) => ipcRenderer.send('runtime:floating-display', id, text),
   modelProgress: view => ipcRenderer.send('runtime:model-progress', view),
 });

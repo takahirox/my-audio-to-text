@@ -10,6 +10,7 @@ export const desktopNodeTypes = Object.freeze({
   TextFormatter: NODE_TYPES.TextFormatter,
   Text: NODE_TYPES.Text,
   Display: NODE_TYPES.Display,
+  FloatingDisplay: NODE_TYPES.FloatingDisplay,
   [FOCUSED_OUTPUT]: { ...NODE_TYPES[FOCUSED_OUTPUT], label: 'Focused application text output',
     help: 'Insert each nonempty TEXT delivery into the field focused at delivery. The default graph connects ASR final. Use the global shortcut or tray to start.' },
 });
@@ -19,7 +20,12 @@ export function defaultDesktopGraph() {
     graphNode(MICROPHONE, 'microphone', 32, 110),
     graphNode(JAPANESE_ASR, 'speech', 285, 64),
     graphNode(FOCUSED_OUTPUT, 'focused-output', 650, 110),
-  ], edges: [edge('microphone', 'audio', 'speech', 'audio'), edge('speech', 'final', 'focused-output', 'text')] };
+    graphNode('FloatingDisplay', 'floating-display', 650, 260),
+  ], edges: [
+    edge('microphone', 'audio', 'speech', 'audio'),
+    edge('speech', 'final', 'focused-output', 'text'),
+    edge('speech', 'provisional', 'floating-display', 'text'),
+  ] };
 }
 
 export function assertDesktopGraph(value) {
@@ -38,7 +44,7 @@ export function planGraph(value, mode) {
   if (focused > 1 || count(MICROPHONE) > 1) throw Error('Connect at most one microphone and one focused application output.');
   if (mode === 'dictation' && !focused) throw Error('Choose a saved graph with a connected focused application output in Graph Library.');
   if (mode === 'live' && focused) throw Error('Start this graph from the global shortcut or tray.');
-  if (mode === 'live' && !count('Display')) throw Error('Connect a source to Display to run this graph in Live.');
+  if (mode === 'live' && !count('Display') && !count('FloatingDisplay')) throw Error('Connect a source to Display or Floating Display to run this graph in Live.');
   const displays = graph.nodes.filter(node => node.type === 'Display').map(({ id, settings }) => ({ id, settings }));
   return { graph, microphone: count(MICROPHONE) === 1, focused: focused === 1, displays };
 }

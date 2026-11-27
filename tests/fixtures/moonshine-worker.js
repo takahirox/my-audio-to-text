@@ -10,7 +10,7 @@ export function moonshineWorkerFixture({ partial = 'pending fixture', final = 'c
     if(data.type==='audio'){
       const speaking = data.audio.some(value => Math.abs(value) > 0.001);
       if (speaking) samples+=data.audio.length;
-      if (speaking) postMessage({type:'partial',text:${JSON.stringify(partial)},session,id:0});
+      if (speaking && ${partial !== null}) postMessage({type:'partial',text:${JSON.stringify(partial)},session,id:0});
       postMessage({type:'consumed',session,sequence:data.sequence});
     }
     if(data.type==='stop'){

@@ -7,6 +7,7 @@ import { defaultDesktopGraph, planGraph } from '../desktop/graph.js';
 import { DesktopLibrary } from '../desktop/library.js';
 import { DesktopSession } from '../desktop/session.js';
 import { FocusedApplicationTextOutputNode } from '../desktop/focused-output.js';
+import { FloatingDisplayNode } from '../web/floating-display-node.js';
 import { edge, graphNode, GRAPH_VERSION } from '../extension/graph.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT } from '../web/port-contracts.js';
@@ -20,6 +21,10 @@ test('desktop JSON rejects browser-only endpoints and preserves saved revisions 
   t.after(() => rmSync(dir, { recursive: true }));
   const path = join(dir, 'library.json');
   const library = new DesktopLibrary(path);
+  const insertionOnly = defaultDesktopGraph();
+  insertionOnly.nodes.pop();
+  insertionOnly.edges.pop();
+  const savedWithoutDisplay = library.add('Insertion only', insertionOnly);
   const graph = defaultDesktopGraph();
   graph.nodes.push(graphNode('ChromeTabAudio', 'tab'));
   assert.throws(() => library.add('Unsupported', graph), /Unsupported desktop Node: ChromeTabAudio/);
@@ -33,6 +38,8 @@ test('desktop JSON rejects browser-only endpoints and preserves saved revisions 
   const reopened = new DesktopLibrary(path);
   assert.equal(reopened.value.selected, entry.id);
   assert.deepEqual(reopened.lookup().graph, replacement);
+  assert.deepEqual(reopened.lookup(savedWithoutDisplay.id).graph, insertionOnly);
+  assert.deepEqual(planGraph(insertionOnly, 'dictation').graph, insertionOnly);
   assert.throws(() => planGraph(reopened.lookup().graph, 'dictation'), /connected focused application output/);
   assert.deepEqual(snapshot.graph, defaultDesktopGraph());
 });
@@ -55,21 +62,47 @@ test('focused output inserts each nonempty generic TEXT delivery in order', asyn
   assert.deepEqual(output, ['partial', '東京🙂', '東京🙂', 'next']);
 });
 
-test('default desktop wiring inserts only the connected final output', async () => {
+test('default desktop wiring shows provisional TEXT and inserts only final TEXT', async () => {
   let speech;
+  let snapshot = '';
   const output = [];
-  const connections = plan().graph.edges.filter(({ to }) => to[0] === 'focused-output');
+  const connections = plan().graph.edges.filter(({ from }) => from[0] === 'speech');
   const pipeline = new Pipeline({ nodes: {
     speech: { outputs: { provisional: TEXT, final: TEXT }, provisionalOutputs: ['provisional'],
       start(context) { speech = context; } },
     'focused-output': new FocusedApplicationTextOutputNode(text => { output.push(text); }),
+    'floating-display': new FloatingDisplayNode(text => { snapshot = text; }),
   }, connections });
   await pipeline.start();
   speech.emit('provisional', 'partial');
-  speech.emitOutputs({ provisional: 'another partial', final: 'final text' });
+  await tick();
+  assert.equal(snapshot, 'partial');
+  assert.deepEqual(output, []);
+  speech.emit('final', 'final text');
+  await tick();
+  assert.equal(snapshot, 'partial');
+  speech.emit('provisional', '');
   await pipeline.stop();
   await pipeline.dispose();
+  assert.equal(snapshot, '');
   assert.deepEqual(output, ['final text']);
+});
+
+test('Floating Display receives generic TEXT even when repeated or empty, and ignores Cancel cleanup', async () => {
+  let source;
+  const seen = [];
+  const pipeline = new Pipeline({ nodes: {
+    custom: { outputs: { value: TEXT }, start(context) { source = context; }, cancel(context) { context.emit('value', 'cleanup'); } },
+    floating: new FloatingDisplayNode(text => { seen.push(text); }),
+  }, connections: [edge('custom', 'value', 'floating', 'text')] });
+  await pipeline.start();
+  source.emitOutputs({ value: '<b>literal</b>' }, { provisional: true });
+  source.emit('value', '<b>literal</b>');
+  source.emit('value', '');
+  await tick();
+  await pipeline.cancel();
+  source.emit('value', 'late');
+  assert.deepEqual(seen, ['<b>literal</b>', '<b>literal</b>', '']);
 });
 
 test('focused output inserts every snapshot emitted by the formatter', async () => {
@@ -109,27 +142,39 @@ test('focused output ignores cancellation deliveries even with a fresh cleanup s
 });
 
 test('Stop drains and blocks new starts, then rejects the old runtime token', async () => {
-  const inserted = [];
+  const inserted = [], shown = [];
   let id;
   const controller = new DesktopSession({
     target: { request: async (action, token, text) => { if (action === 'insert') inserted.push([token, text]); } },
     run: async (action, token) => {
       if (action === 'start') id = token;
-      if (action === 'stop') await controller.insert(token, ' final\n');
+      if (action === 'stop') {
+        assert.equal(controller.current.floatingText, '');
+        controller.floatingDisplay(token, 'during drain');
+        await controller.insert(token, ' final\n');
+      }
     },
-    onChange() {}, onDisplay() {},
+    onChange() {}, onDisplay() {}, onFloatingDisplay: text => shown.push(text),
   });
   await controller.start(plan());
   const old = id;
+  controller.floatingDisplay(old, 'first preview');
   const draining = controller.stop();
   await controller.start(plan());
   assert.equal(id, old);
   await draining;
   await controller.start(plan());
   assert.notEqual(id, old);
+  assert.equal(controller.current.floatingText, '');
+  controller.floatingDisplay(old, 'late preview');
   await assert.rejects(controller.insert(old, 'late'), /no longer authorized/);
   assert.deepEqual(inserted, [[old, ' final\n']]);
-  await controller.cancel();
+  controller.floatingDisplay(id, 'new preview');
+  const cancel = controller.cancel();
+  assert.equal(controller.current.floatingText, '');
+  controller.floatingDisplay(id, 'after cancel');
+  assert.deepEqual(shown, ['first preview', 'new preview']);
+  await cancel;
 });
 
 test('fatal helper failure discards queued output and cannot overlap cleanup with a new session', async () => {

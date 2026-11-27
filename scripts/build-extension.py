@@ -11,7 +11,7 @@ SHARED_FILES = (
     "plamo-policy.js", "plamo-worker.js", "plamo-chat-template.jinja",
     "optional-model-assets.js",
     "optional-asr-core.js", "optional-asr-node.js", "moonshine-worker.js", "moonshine-small-ja-node.js", "moonshine-small-ja-worker.js", "moonshine-medium-node.js", "moonshine-medium-worker.js", "moonshine-stream.js",
-    "text-constant-node.js",
+    "text-constant-node.js", "floating-display-node.js",
     "text-summary-models.js", "text-summary-node.js", "text-summary-policy.js", "text-summary-worker.js", "gpu-lifecycle.js",
     "if-condition-model.js", "if-condition-node.js", "if-condition-policy.js", "if-condition-worker.js",
     "text-sliding-window-node.js", "text-window-node.js", "keyed-text-coalesce-node.js", "keyed-text-pair-node.js", "paired-text.js", "keyed-paired-text-accumulator-node.js", "display-node.js", "hold-node.js", "button-node.js", "pipeline.js", "port-contracts.js", "text-nodes.js", "number-node.js", "transcription-nodes.js",
