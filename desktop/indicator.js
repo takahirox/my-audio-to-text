@@ -9,7 +9,8 @@ window.indicator.onUpdate(view => {
     text.scrollTop = 0;
   }
   document.body.dataset.recording = String(view.microphone);
-  state.textContent = view.error || ({ preparing: 'Preparing…', running: view.microphone ? 'Recording' : 'Running', stopping: 'Finishing…' })[view.phase] || '';
+  state.textContent = view.error || ({ preparing: 'Preparing…', running: view.microphone ? 'Recording' : 'Running',
+    stopping: 'Finishing…', canceling: 'Canceling…' })[view.phase] || '';
   stop.hidden = view.phase === 'idle' || view.phase === 'canceling';
   stop.disabled = view.phase === 'stopping';
   stop.textContent = view.phase === 'preparing' ? 'Cancel' : 'Stop';

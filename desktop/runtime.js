@@ -23,12 +23,11 @@ function modelCache(key) {
 }
 
 class DesktopMicrophoneNode extends BrowserTabAudioNode {
-  constructor(fail, onStopped) {
+  constructor(fail, onCaptureChange) {
     super({
       onEnded: () => fail('The system microphone disconnected. Check the default input and start again.'),
-      sourceFactory: (onAudio, ended) => new Microphone(onAudio, ended),
+      sourceFactory: (onAudio, ended) => new Microphone(onAudio, ended, onCaptureChange),
     });
-    this.onStopped = onStopped;
   }
 
   async start(context) {
@@ -40,10 +39,9 @@ class DesktopMicrophoneNode extends BrowserTabAudioNode {
     }
   }
 
-  async stop() {
+  stop() {
     if (this.disposed) return this.releasing;
-    await super.stop();
-    this.onStopped();
+    return super.stop();
   }
 
   async dispose() {
@@ -69,6 +67,14 @@ async function start(id, graph) {
   const controller = new AbortController(), { signal } = controller;
   const owner = { id, controller };
   current = owner;
+  const captures = new Set();
+  const onCaptureChange = (node, capturing) => {
+    const wasCapturing = captures.size > 0;
+    if (capturing) captures.add(node);
+    else captures.delete(node);
+    const isCapturing = captures.size > 0;
+    if (current === owner && wasCapturing !== isCapturing) host.captureState(id, isCapturing);
+  };
   const active = () => current === owner && !signal.aborted;
   const fail = message => { if (active()) host.failure(id, message); };
   const status = (node, message, severity, needsActivation) => {
@@ -82,7 +88,7 @@ async function start(id, graph) {
       preload: true,
       formatterOptions: { separatePreviews: true },
       hostNodes: {
-        [MICROPHONE]: () => new DesktopMicrophoneNode(fail, () => host.captureEnded(id)),
+        [MICROPHONE]: ({ id: node }) => new DesktopMicrophoneNode(fail, capturing => onCaptureChange(node, capturing)),
         [FOCUSED_OUTPUT]: () => new FocusedApplicationTextOutputNode(text => host.insert(id, text)),
         Display: ({ id: node, settings }) => new DesktopDisplayNode(settings, (port, item, provisional) => {
           if (active()) host.display(id, node, port, item, provisional);
@@ -125,7 +131,7 @@ async function start(id, graph) {
       if (!unused.length) return;
       // Release sources without flushing into failed paths. Other branches keep their live state.
       void Promise.all(unused.map(([, source]) => source.dispose())).then(() => {
-        if (active() && unused.length === audioSources.size) host.captureEnded(id, message);
+        if (active() && unused.length === audioSources.size) host.captureState(id, captures.size > 0, message);
       }, error => fail(error.message));
     }
     Object.assign(owner, runtime);

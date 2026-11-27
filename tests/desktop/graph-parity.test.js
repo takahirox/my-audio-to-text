@@ -262,8 +262,7 @@ const japaneseAsr = {
   script: moonshineWorkerFixture(), graph: modelGraph('SpeechToTextMoonshineSmallJa'),
 };
 
-async function shortcutInference(app, page, runtime, models) {
-  await prepareInferenceFixtures(app, runtime, models);
+async function useSyntheticMicrophones(runtime) {
   await runtime.evaluate(async () => {
     const { Microphone } = await import('/web/audio.js');
     // Use the real capture lifecycle with synthetic media tracks.
@@ -274,6 +273,14 @@ async function shortcutInference(app, page, runtime, models) {
       window.captureTracks.push(...stream.getAudioTracks());
       return stream;
     };
+  });
+  return () => runtime.evaluate(() => window.captureTracks.map(track => track.readyState));
+}
+
+async function shortcutInference(app, page, runtime, models) {
+  await prepareInferenceFixtures(app, runtime, models);
+  const tracks = await useSyntheticMicrophones(runtime);
+  await runtime.evaluate(() => {
     const NativeWorker = window.Worker;
     window.moonshineWorkers = {};
     window.Worker = class extends NativeWorker {
@@ -301,10 +308,61 @@ async function shortcutInference(app, page, runtime, models) {
   return {
     start: () => app.evaluate((_electron, shortcut) => globalThis.releaseTestShortcut(shortcut), shortcut),
     fail: worker => runtime.evaluate(key => window.moonshineWorkers[key].postMessage({ type: 'fixture-error' }), worker),
-    tracks: () => runtime.evaluate(() => window.captureTracks.map(track => track.readyState)),
+    tracks,
     indicator: app.windows().find(page => page.url().endsWith('/indicator.html')),
   };
 }
+
+test('packaged desktop shows recording with one live microphone during Start and Stop', { timeout: 30000 }, async t => {
+  const { app, page, runtime } = await launch(t);
+  await prepareInferenceFixtures(app, runtime, [mediumAsr]);
+  const tracks = await useSyntheticMicrophones(runtime);
+  await addLive(page, 'Two microphones', graph([
+    ...mediumAsr.graph.nodes, spec('MicrophoneAudio', 'second-source'),
+    spec('SpeechToTextMoonshineMediumEn', 'second-model'), spec('Display', 'second-output'),
+  ], [
+    ...mediumAsr.graph.edges, edge('second-source', 'audio', 'second-model', 'audio'),
+    edge('second-model', 'final', 'second-output', 'input1'),
+  ]));
+  await runtime.evaluate(async () => {
+    const { Microphone } = await import('/web/audio.js');
+    const { getMedia, stop } = Microphone.prototype;
+    Microphone.prototype.getMedia = async function () {
+      if (window.captureTracks.length === 1) await new Promise(resolve => { window.resumeCaptureStart = resolve; });
+      return getMedia.call(this);
+    };
+    Microphone.prototype.stop = async function (flush = true) {
+      if (flush && window.captureTracks.filter(track => track.readyState === 'ended').length === 1) {
+        await new Promise(resolve => { window.resumeCaptureStop = resolve; });
+      }
+      return stop.call(this, flush);
+    };
+  });
+  const indicator = app.windows().find(page => page.url().endsWith('/indicator.html')).locator('body');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await runtime.waitForFunction(() => Boolean(window.resumeCaptureStart));
+  await phase(page, 'preparing');
+  assert.deepEqual(await tracks(), ['live']);
+  const duringStart = await indicator.getAttribute('data-recording');
+
+  await runtime.evaluate(() => window.resumeCaptureStart());
+  await phase(page, 'running');
+  assert.deepEqual(await tracks(), ['live', 'live']);
+  await expect(indicator).toHaveAttribute('data-recording', 'true');
+
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await runtime.waitForFunction(() => Boolean(window.resumeCaptureStop));
+  await phase(page, 'stopping');
+  assert.deepEqual((await tracks()).sort(), ['ended', 'live']);
+  const duringStop = await indicator.getAttribute('data-recording');
+
+  await runtime.evaluate(() => window.resumeCaptureStop());
+  await phase(page, 'idle');
+  assert.deepEqual(await tracks(), ['ended', 'ended']);
+  assert.equal((await get(page)).session.error, '');
+  await expect(indicator).toHaveAttribute('data-recording', 'false');
+  assert.deepEqual({ duringStart, duringStop }, { duringStart: 'true', duringStop: 'true' });
+});
 
 test('packaged desktop stops default shortcut dictation, releases capture and shows the fatal Japanese ASR error', {
   timeout: 30000,
@@ -374,6 +432,7 @@ test('packaged Live shows models for the executable graph and retains them acros
 }, async t => {
   const { app, page, runtime } = await launch(t);
   await prepareInferenceFixtures(app, runtime, [mediumAsr]);
+  await useSyntheticMicrophones(runtime);
   const entry = await addLive(page, 'Editable Live graph', mediumAsr.graph);
   const badges = page.locator('#live-models button');
   await expect(badges).toHaveText([/Moonshine Medium/]);

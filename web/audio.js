@@ -35,7 +35,9 @@ export function joinAudio(chunks) {
 }
 
 export class BrowserAudioSource {
-  constructor(onAudio, onEnded) { this.onAudio = onAudio; this.onEnded = onEnded; }
+  constructor(onAudio, onEnded, onCaptureChange) {
+    Object.assign(this, { onAudio, onEnded, onCaptureChange });
+  }
   checkCanceled() {
     if (this.canceled) throw new DOMException('Capture canceled', 'AbortError');
   }
@@ -55,6 +57,7 @@ export class BrowserAudioSource {
       if (this.media.getTracks().some(track => track.readyState === 'ended')) {
         throw new Error('Audio sharing ended before capture started. Start again and select a tab with audio.');
       }
+      this.onCaptureChange?.(true);
       await resumed; this.checkCanceled();
       // Display capture requires video, but only its audio enters Web Audio.
       this.source = this.context.createMediaStreamSource(new MediaStream(tracks));
@@ -108,6 +111,7 @@ export class BrowserAudioSource {
     if (!this.media || this.releasedMedia === this.media) return;
     this.releasedMedia = this.media;
     this.media.getTracks().forEach(track => { track.onended = null; track.stop(); });
+    this.onCaptureChange?.(false);
   }
   disconnect() {
     if (this.node?.port) this.node.port.onmessage = null;
