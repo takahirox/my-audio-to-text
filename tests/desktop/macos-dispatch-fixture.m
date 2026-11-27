@@ -15,6 +15,7 @@ static pid_t systemFieldPID;
 static BOOL trusted = YES, canPost = YES;
 static BOOL secureInput, protectedField, disabledField, readOnly, notEditable;
 static BOOL modifiers, noField, systemField, noRole, menu;
+static CGEventFlags postedModifiers;
 static BOOL failSnapshot, failStage, failRestore, copyAfterStage, pauseAfterStage;
 static BOOL switchDuringProtection, switchLayoutAfterStage;
 static pid_t switchAppAfterStage;
@@ -159,7 +160,10 @@ static void postKey(CGEventTapLocation tap, CGEventRef event) {
     assert(tap == kCGSessionEventTap && frontPid > 0 && trusted && canPost && !secureInput && !protectedField &&
            !disabledField && !readOnly && !notEditable && !modifiers && !menu);
     [keyCodes addObject:@(CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode))];
-    assert(CGEventGetFlags(event) == kCGEventFlagMaskCommand);
+    // Model a session retaining the posted Command flag while the physical
+    // keyboard remains untouched between deliveries.
+    postedModifiers = CGEventGetFlags(event);
+    assert(postedModifiers == kCGEventFlagMaskCommand);
     if (CGEventGetType(event) == kCGEventKeyUp) {
         assert(keyUps + 1 == keyDowns);
         keyUps++;
@@ -175,6 +179,11 @@ static void postKey(CGEventTapLocation tap, CGEventRef event) {
         [reads addObject:text ?: @""];
         [editors[target] readSelectionFromPasteboard:clipboard type:NSPasteboardTypeString];
     };
+}
+
+static CGEventFlags modifierFlags(CGEventSourceStateID state) {
+    CGEventFlags physical = modifiers ? kCGEventFlagMaskCommand : 0;
+    return state == kCGEventSourceStateHIDSystemState ? physical : physical | postedModifiers;
 }
 
 static dispatch_time_t delayTime(dispatch_time_t start, int64_t ns) {
@@ -216,7 +225,9 @@ static void advanceTime(uint64_t ms) {
 #define AXUIElementSetMessagingTimeout setMessagingTimeout
 #define IsSecureEventInputEnabled() (secureInput)
 #define CGPreflightPostEventAccess() (canPost)
-#define GetCurrentKeyModifiers() (modifiers ? cmdKey : 0)
+// Keep modeling the legacy Carbon lookup so restoring it reintroduces the stall.
+#define GetCurrentKeyModifiers() (modifierFlags(kCGEventSourceStateCombinedSessionState) ? cmdKey : 0)
+#define CGEventSourceFlagsState modifierFlags
 #define CGEventPost postKey
 #define TISCopyCurrentKeyboardLayoutInputSource fixtureInputSource
 #define TISGetInputSourceProperty layoutProperty
