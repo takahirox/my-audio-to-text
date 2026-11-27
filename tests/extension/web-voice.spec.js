@@ -1013,28 +1013,41 @@ test('Floating Display shows the page session’s latest text and clears while f
   } finally { await r.detach(); }
 });
 
-test('Floating Display renders a plain Text source during extension Live', async ({ voice: t }) => {
+test('Floating Display keeps Live controls visible with long plain text in a short viewport', async ({ voice: t }) => {
   test.skip(real);
-  const id = await t.library.evaluate(async () => {
+  const text = '<b>Live text</b> '.repeat(55).trim();
+  const id = await t.library.evaluate(async text => {
     const { GraphLibrary, readLibrary } = await import('./graph-library.js');
     const { graphNode, edge, GRAPH_VERSION } = await import('./graph.js');
     const literal = graphNode('Text', 'literal');
-    literal.settings.value = '<b>Live text</b>';
+    literal.settings.value = text;
     const graph = { version: GRAPH_VERSION, nodes: [literal, graphNode('FloatingDisplay', 'preview')],
       edges: [edge('literal', 'value', 'preview', 'text')] };
     const next = await new GraphLibrary(localStorage).create({ name: 'Floating preview', graph }, readLibrary(localStorage).revision);
     return next.graphs.at(-1).id;
-  });
+  }, text);
   const live = await t.context.newPage();
+  await live.setViewportSize({ width: 390, height: 240 });
   await live.goto(t.url + 'recorder.html?graph=' + id);
   await expect(live.locator('#model-status')).toHaveText('Ready');
   const preview = live.locator('#floating-text');
+  const stop = live.getByRole('button', { name: 'Stop' });
+  const status = live.locator('#session-state');
   await expect(preview).toBeHidden();
   await live.locator('#start').click();
-  await expect(preview).toHaveText('<b>Live text</b>');
+  await expect(preview).toHaveText(text);
   await expect(preview).toBeVisible();
+  await expect(preview).toBeInViewport();
   await expect(preview.locator('b')).toHaveCount(0);
-  await live.locator('#stop').click();
+  await expect(status).toHaveText('Running');
+  const [previewBox, stopBox, statusBox] = await Promise.all([preview.boundingBox(), stop.boundingBox(), status.boundingBox()]);
+  expect(previewBox.height).toBeLessThanOrEqual(96);
+  for (const control of [stopBox, statusBox]) {
+    expect(control.y).toBeGreaterThanOrEqual(0);
+    expect(control.y + control.height).toBeLessThanOrEqual(240);
+    expect(intersects(previewBox, control)).toBe(false);
+  }
+  await stop.click();
   await expect(preview).toBeEmpty();
   await expect(preview).toBeHidden();
 });

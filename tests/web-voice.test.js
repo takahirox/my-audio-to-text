@@ -61,6 +61,27 @@ test('floating preview includes complete ancestors without applying the field pa
   assert.match(webVoiceError(saved), /committed/);
 });
 
+test('one translator can feed committed insertion and a provisional floating preview', () => {
+  for (const type of ['TranslateGemma4B', 'Plamo3Translate2B']) {
+    const graph = voice();
+    graph.nodes.push(graphNode(type, 'translate'), graphNode('FloatingDisplay', 'preview'));
+    graph.edges[1] = edge('asr', 'final', 'translate', 'text');
+    graph.edges.push(edge('asr', 'finalId', 'translate', 'id'), edge('asr', 'provisional', 'translate', 'provisional'),
+      edge('asr', 'provisionalId', 'translate', 'provisionalId'), edge('translate', 'text', 'field', 'text'),
+      edge('translate', 'provisionalText', 'preview', 'text'));
+    assert.deepEqual(webVoiceGraph(graph), graph, type);
+    assert.deepEqual(webVoiceGraph(webVoiceGraph(graph)), graph, type);
+
+    for (const output of ['provisionalText', 'error']) {
+      const invalid = structuredClone(graph);
+      invalid.edges.find(e => e.to[0] === 'field').from[1] = output;
+      assert.match(webVoiceError(invalid), /committed/, `${type}.${output}`);
+    }
+    graph.edges[1].from[1] = 'provisional';
+    assert.match(webVoiceError(graph), /committed/, `${type}.text`);
+  }
+});
+
 test('existing ASRs, translation, formatting, batching and summary processors retain typed graph flexibility', () => {
   for (const type of ['SpeechToTextMoonshineSmallJa', 'SpeechToTextMoonshineMediumEn']) {
     const graph = voice(); graph.nodes[1] = graphNode(type, 'asr'); assert.equal(webVoiceError(graph), '', type);
