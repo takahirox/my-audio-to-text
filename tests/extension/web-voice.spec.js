@@ -1013,7 +1013,11 @@ test('Floating Display shows the page session’s latest text and clears while f
   } finally { await r.detach(); }
 });
 
-for (const shared of [false, true]) test(`Floating Display translation failure keeps final insertion active with a ${shared ? 'shared' : 'preview-only'} translator`, async ({ voice: t }) => {
+for (const { scenario, shared, preview, warning } of [
+  { scenario: 'preview-only worker rejection', shared: false, preview: 'bad preview', warning: 'Controlled preview rejection' },
+  { scenario: 'shared worker rejection', shared: true, preview: 'bad preview', warning: 'Controlled preview rejection' },
+  { scenario: 'shared input over the character limit', shared: true, preview: 'x'.repeat(1001), warning: 'Provisional translation accepts at most 1,000 characters.' },
+]) test(`Floating Display translation failure (${scenario}) keeps final insertion active`, async ({ voice: t }) => {
   test.skip(real);
   const bytes = Buffer.from('controlled PLaMo weights');
   await writeFile(path.join(t.root, 'extension/plamo-fixture.bin'), bytes);
@@ -1053,8 +1057,8 @@ for (const shared of [false, true]) test(`Floating Display translation failure k
     const field = t.website.locator('#first'), prefix = shared ? 'translated ' : '';
     await emit('fixture-final', 0, 'first ');
     await expect(field).toHaveValue(`before ${prefix}first after`);
-    await emit('fixture-partial', 1, 'bad preview');
-    await expect.poll(async () => (await inspectControl(t)).status).toContain('Controlled preview rejection');
+    await emit('fixture-partial', 1, preview);
+    await expect.poll(async () => (await inspectControl(t)).status).toBe(`Preview · translate: Translation unavailable: ${warning}`);
     await recording(t);
     expect(await inspectControl(t)).toMatchObject({ icon: 'stop', disabled: false });
     await expect(field).toHaveValue(`before ${prefix}first after`);

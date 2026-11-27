@@ -103,7 +103,6 @@ export class TranslationSchedulerNode {
   }
   receive(port, value, context = this.context) { return this.receiveInputs({ [port]: value }, context); }
   accept(port, source, context, id) {
-    if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
     this.revision++;
     const snapshot = { ...(id === undefined ? {} : { id }), ...(this.acceptsContext ? { translationContext: this.translationContext } : {}),
       ...(this.acceptsLanguages ? { languages: this.languages } : {}) };
@@ -118,8 +117,14 @@ export class TranslationSchedulerNode {
       return { source, ...snapshot, context: work.context, complete: work.complete };
     };
     if (port === 'provisional') {
+      this.previewId = id; this.hasPreview = true;
+      if (source.length > 1000) {
+        this.emit({ source, id, context, provisional: true, revision: this.revision }, undefined,
+          'Provisional translation accepts at most 1,000 characters.');
+        return;
+      }
       this.preview = { ...own(), provisional: true, revision: this.revision };
-      this.previewId = id; this.hasPreview = true; this.pump(); return;
+      this.pump(); return;
     }
     this.clearPreview(context);
     // Bound closed work too. Overflow is an explicit branch failure, never a
