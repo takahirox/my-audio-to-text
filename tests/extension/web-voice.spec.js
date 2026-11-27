@@ -981,17 +981,20 @@ test('Floating Display shows the page session’s latest text and clears while f
     await expect.poll(snapshot).toBe('first hypothesis');
     const text = '<b>東京🙂</b> '.repeat(55).trim();
     await emit('fixture-partial', 0, text);
-    await expect.poll(snapshot).toBe(text);
-    const ui = await inspectControl(t);
-    expect(ui.preview.elements).toBe(0);
-    expect(ui.preview.box.height).toBeGreaterThan(0);
-    expect(ui.preview.box.height).toBeLessThanOrEqual(84);
-    expect(ui.preview.box.x).toBeGreaterThanOrEqual(0);
-    expect(ui.preview.box.y).toBeGreaterThanOrEqual(0);
-    expect(ui.preview.box.x + ui.preview.box.width).toBeLessThanOrEqual(360);
-    expect(ui.preview.box.y + ui.preview.box.height).toBeLessThanOrEqual(190);
-    expect(intersects(ui.preview.box, ui.button)).toBe(false);
-    expect(intersects(ui.preview.box, ui.bubble)).toBe(false);
+    // The preview text changes before the next animation frame repositions it.
+    await expect(async () => {
+      const ui = await inspectControl(t);
+      expect(ui.preview.text).toBe(text);
+      expect(ui.preview.elements).toBe(0);
+      expect(ui.preview.box.height).toBeGreaterThan(0);
+      expect(ui.preview.box.height).toBeLessThanOrEqual(84);
+      expect(ui.preview.box.x).toBeGreaterThanOrEqual(0);
+      expect(ui.preview.box.y).toBeGreaterThanOrEqual(0);
+      expect(ui.preview.box.x + ui.preview.box.width).toBeLessThanOrEqual(360);
+      expect(ui.preview.box.y + ui.preview.box.height).toBeLessThanOrEqual(190);
+      expect(intersects(ui.preview.box, ui.button)).toBe(false);
+      expect(intersects(ui.preview.box, ui.bubble)).toBe(false);
+    }).toPass({ timeout: 5000 });
     await expect(t.website.locator('#first')).toBeFocused();
     await expect(t.website.locator('#first')).toHaveValue('before after');
 
