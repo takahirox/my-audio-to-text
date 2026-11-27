@@ -10,7 +10,7 @@ import { SpeakerOutputNode } from '../web/speaker-output.js';
 // recognition; no mutable runtime is shared with another Live/Web session.
 export class TabSession {
   constructor(render, {
-    onSourceEnded,
+    onSourceEnded, onFloatingDisplay, onRuntimeNodeError, onTranslationRequestError,
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url)), { type: 'module' }),
     sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
@@ -19,6 +19,9 @@ export class TabSession {
     prepareModelAssets = prepareGraphModelAssets,
   } = {}) {
     this.onSourceEnded = onSourceEnded;
+    this.onFloatingDisplay = onFloatingDisplay;
+    this.onRuntimeNodeError = onRuntimeNodeError;
+    this.onTranslationRequestError = onTranslationRequestError;
     this.prepareModelAssets = prepareModelAssets;
     this.textProcessingWorkerFactory = textProcessingWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
@@ -106,9 +109,14 @@ export class TabSession {
     // Unknown event types are diagnostics by default, including future Nodes.
     // Never infer severity from message text.
     if (event.type !== 'error' && event.severity !== 'error') return;
-    this.nodeErrors.set(id, { message: event.message || 'Operation failed. Start a new session to retry.', cause: event.cause });
-    this.update({ error: [...this.nodeErrors].map(([id, error]) => `${id}: ${error.message}`).join('\n'),
-      modelRecovery: [...this.nodeErrors.keys()].some(id => {
+    const message = event.message || 'Operation failed. Start a new session to retry.';
+    const handled = this.session && this.onRuntimeNodeError?.({ id, message });
+    // Keep the error for deduplication when Pipeline reports the same failure.
+    this.nodeErrors.set(id, { message, cause: event.cause, handled });
+    if (handled) { this.update(); return; }
+    const errors = [...this.nodeErrors].filter(([, error]) => !error.handled);
+    this.update({ error: errors.map(([id, error]) => `${id}: ${error.message}`).join('\n'),
+      modelRecovery: errors.some(([id]) => {
         const node = (this.view.activeGraph || this.graph).nodes.find(node => node.id === id);
         return node && graphModelRequirements({ nodes: [node] }).length > 0;
       }) });
@@ -237,7 +245,7 @@ export class TabSession {
   ownsRuntime(owner) { return this.session === owner || this.prepared === owner; }
   createRuntime(session, snapshot) {
     const graph = executableGraph(snapshot);
-    const hasDisplay = graph.nodes.some(node => node.type === 'Display');
+    const hasDisplay = graph.nodes.some(node => ['Display', 'FloatingDisplay'].includes(node.type));
     const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput'].includes(node.type));
     Object.assign(session, buildGraph(snapshot, {
         preload: this.livePreparation,
@@ -306,6 +314,9 @@ export class TabSession {
         onDisplay: (id, state, port) => {
           if (this.ownsRuntime(session) || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: { ...this.view.displays[id], [port]: state } } });
         },
+        onFloatingDisplay: text => {
+          if (this.session === session && this.view.state !== 'stopping') this.onFloatingDisplay?.(text);
+        },
         onCapturedAudio: (pcm, id) => {
           if (!this.ownsRuntime(session)) return;
           if (!session.sourceStates[id] && pcm.some(sample => Math.abs(sample) > 0.00001)) {
@@ -314,9 +325,11 @@ export class TabSession {
           }
         },
         onEnded: id => { if (this.ownsRuntime(session)) void this.sourceEnded(session, id); },
-        onTranslationState: (state, id, severity) => {
+        onTranslationState: (state, id, severity, request) => {
           if (!this.ownsRuntime(session)) return;
-          this.nodeEvent({ severity, message: state }, id);
+          if (!request || !this.onTranslationRequestError?.({ id, message: state, ...request })) {
+            this.nodeEvent({ severity, message: state }, id);
+          }
           session.translationStates ||= {};
           session.translationStates[id] = state;
           const statuses = Object.entries(session.translationStates);

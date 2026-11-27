@@ -4,7 +4,7 @@ import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
 import { readLibrary, LIBRARY_KEY } from './graph-library.js';
 import { launchLibrary } from './launch-library.js';
-import { webVoiceGraph } from './web-voice-graph.js';
+import { webVoicePaths } from './web-voice-graph.js';
 
 // Chrome permits one offscreen document per profile. Only this inert host is
 // shared: every owner has its own graph, models, PCM source and output connection.
@@ -19,7 +19,7 @@ function send(owner, message) {
 }
 function publish(owner, state, error = '') {
   owner.state = state;
-  send(owner, { type: 'state', state, error });
+  send(owner, { type: 'state', state, error, notice: state === 'recording' ? owner.notice || '' : '' });
 }
 async function finish(owner, cancel = false, error = '') {
   if (owner.ending) {
@@ -47,7 +47,11 @@ async function start(owner, target, entry) {
   try {
     // The coordinator captured this validated graph at the explicit Start.
     // Revalidate the detached snapshot without rereading a later library edit.
-    const snapshot = webVoiceGraph(entry.graph);
+    const { graph: snapshot, fieldNodes, displayNodes } = webVoicePaths(entry.graph);
+    const previewNotice = (id, message) => {
+      owner.notice = `Preview · ${id}: ${message}`;
+      return true;
+    };
     owner.pcm = new WebVoicePCM();
     owner.session = new TabSession(view => {
       if (owner.ending) return;
@@ -59,6 +63,18 @@ async function start(owner, target, entry) {
     }, { microphoneSourceFactory: audio => owner.pcm.source(audio), graph: snapshot, graphId: entry.id, graphName: entry.name,
       pageConnectionFactory: (target, onEvent) => new PageConnection(target, onEvent,
         chrome.runtime.connect({ name: `web-voice-output:${owner.token}` })),
+      onRuntimeNodeError: ({ id, message }) => displayNodes.has(id) && !fieldNodes.has(id) && previewNotice(id, message),
+      onTranslationRequestError: ({ id, message, provisional }) => {
+        // A shared translator has independent provisional and committed jobs.
+        if (!displayNodes.has(id) || (!provisional && fieldNodes.has(id))) return false;
+        return previewNotice(id, message);
+      },
+      onFloatingDisplay: text => {
+        if (!owner.ending && owner.floatingText !== text) {
+          owner.floatingText = text;
+          send(owner, { type: 'floating-display', text });
+        }
+      },
       onSourceEnded: () => { void finish(owner, true, 'Microphone ended or permission was removed. Click the mic to start a new session.'); } });
     owner.session.outputTarget = structuredClone(target);
     // Automatic download is a Live-window fallback. Web dictation keeps its
@@ -97,7 +113,7 @@ port.onMessage.addListener(message => {
   }
   if (message.type !== 'initialize' || owner || disconnected) return;
   if (message.stopRequested) { send({ token: message.token }, { type: 'ended' }); return; }
-  const next = { token: message.token, state: 'preparing' };
+  const next = { token: message.token, state: 'preparing', floatingText: '' };
   owners.set(next.token, next);
   void start(next, message.target, message.graph);
 });

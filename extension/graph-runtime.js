@@ -24,6 +24,7 @@ import { SpeechToTextMoonshineMediumEnNode } from '../web/moonshine-medium-node.
 import { IfConditionNode } from '../web/if-condition-node.js';
 import { NumberNode } from '../web/number-node.js';
 import { DisplayNode } from '../web/display-node.js';
+import { FloatingDisplayNode } from '../web/floating-display-node.js';
 import { KeyedPairedTextAccumulatorNode } from '../web/keyed-paired-text-accumulator-node.js';
 import { KeyedTextPairNode } from '../web/keyed-text-pair-node.js';
 import { KeyedTextCoalesceNode } from '../web/keyed-text-coalesce-node.js';
@@ -160,6 +161,7 @@ export function buildGraph(graph, options) {
       case 'KeyedTextPair': node = new KeyedTextPairNode(); break;
       case 'KeyedPairedTextAccumulator': node = new KeyedPairedTextAccumulatorNode(); break;
       case 'Display': node = new DisplayNode((dom, port) => options.onDisplay?.(spec.id, dom, port), spec.settings); break;
+      case 'FloatingDisplay': node = new FloatingDisplayNode(text => options.onFloatingDisplay?.(text)); break;
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;
       case 'TextSlidingWindow': node = new TextSlidingWindowNode(); break;
       case 'TextWindow': node = new TextWindowNode(); break;
@@ -168,12 +170,12 @@ export function buildGraph(graph, options) {
       case 'Plamo3Translate2B':
         node = new TranslationSchedulerNode({ prepare: options.preparePlamo || verifiedPlamoCache,
           TranslationNode: Plamo3Translate2BTranslationNode, modelName: 'PLaMo 3 Translate 2B', workerFactory: options.translationWorkerFactory,
-          onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
+          onState: (state, severity, request) => options.onTranslationState?.(state, spec.id, severity, request) }); resources.translations.push(node); break;
       case 'TranslateGemma4B':
         node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
           TranslationNode: TranslateGemmaTranslationNode,
           modelName: 'TranslateGemma 4B', workerFactory: options.translationWorkerFactory,
-          onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
+          onState: (state, severity, request) => options.onTranslationState?.(state, spec.id, severity, request) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {
         const Node = spec.type === 'Supertonic3' ? Supertonic3TextToSpeechNode : KokoroTextToSpeechNode;
         const production = new Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,

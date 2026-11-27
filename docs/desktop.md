@@ -61,9 +61,11 @@ its GTK/XEmbed fallback. [Electron Linux tray behavior](https://www.electronjs.o
 3. Press **Control+Option+Command+D** on macOS or **Ctrl+Alt+Shift+D** on X11.
    The indicator shows **Preparing** while the graph loads and **Recording**
    once microphone capture starts.
-4. Speak Japanese. With the default graph, each final result goes to the field
-   focused when it is delivered. Switch fields, windows, or apps while
-   recording. Press the same shortcut or **Stop** on the indicator to finish
+4. Speak Japanese. With the default graph, the recording indicator shows the
+   latest hypothesis and clears it when the recognizer completes the utterance.
+   Each final result goes to the field focused when it is delivered. Switch
+   fields, windows, or apps while recording. Press the shortcut again or click
+   **Stop** on the indicator to finish
    and drain accepted output. **Cancel voice typing** in the tray discards work
    still pending.
 
@@ -170,16 +172,21 @@ using the [Apple Silicon build commands](#apple-silicon-macos).
 
 ## Graphs and models
 
-The default graph is
-`MicrophoneAudio → SpeechToTextMoonshineSmallJa.final → FocusedInputTextOutputNode`.
-The editor labels this sink **Focused application text output**. The saved
-graph retains the same node type and port schema used by the browser host.
-The default graph connects only the recognizer's `final` output to the sink.
-To insert streaming hypotheses, connect `provisional` instead. The sink accepts
-TEXT from any supported producer, including **Text** and **Text formatter**.
+**Focused application text output** uses the same node type and port schema
+as the browser's focused output. It accepts TEXT from any supported producer,
+including **Text** and **Text formatter**.
 Each nonempty delivery is a separate insertion, including repeated values.
-Empty strings leave the field as it is. Other supported nodes are
-**Microphone audio**, **Speech Recognition · JA / Streaming**, and **Display**.
+Empty strings leave the field as it is.
+
+### Floating Display
+
+New default dictation graphs connect the recognizer's `provisional` output to
+**Floating Display** and its `final` output to **Focused application text output**.
+To add the preview to an existing graph, add **Floating Display** in Graph Editor
+and connect `provisional` to its `text` input. Keep the `final` connection to
+the focused output. The indicator shows the latest supplied TEXT beside Stop
+until an empty string clears it or the session ends. Existing saved graphs
+keep their original connections.
 
 Use **Graph Library** to create, duplicate, edit, select, and import or export
 individual graphs. The editor uses the same typed ports, settings, wiring
@@ -188,7 +195,9 @@ cannot be saved, repair the draft or use **Undo** to return to the saved
 graph. Desktop rejects graph nodes outside its supported subset and shows
 the original import error.
 A running graph uses the last saved snapshot taken at Start. Edits apply to the
-next session. Use **Live** to run Display graphs inside the management window.
+next session. Use **Live** to run graphs with a Display or Floating Display.
+Display panes appear inside the management window and Floating Display uses
+the session indicator.
 Graphs with both Display and a focused output start from the global shortcut
 or tray and retain the latest Display panes for inspection in Live.
 

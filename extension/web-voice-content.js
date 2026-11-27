@@ -13,7 +13,7 @@
   };
   const controlSize = 36, gap = 6, viewportInset = 4;
   const { editable, field, native, value, saveCaret, active, Delivery } = LocalTextInsertion;
-  let control, enabled = false, disposed = true, target, session, host, button, status, observer, timer, state = 'idle';
+  let control, enabled = false, disposed = true, target, session, host, button, status, floatingText, observer, timer, state = 'idle';
   let recovery, recoveryView;
   let listeners, menu, menuCaret, choices = [], defaultId = null;
   const positionKey = 'web-microphone-position-v1';
@@ -35,6 +35,8 @@
     if (session) closeMenu();
     host?.setAttribute('data-voice-state', next);
     if (!button) return;
+    if (!session || next === 'stopping' || next === 'error') floatingText.textContent = '';
+    const diagnostic = error || (next === 'recording' ? session?.notice : '');
     const labels = { idle: recovery?.pending.length ? 'Review retained dictation' : 'Start voice typing', preparing: 'Preparing… Click to cancel', recording: 'Recording · Stop voice typing', stopping: 'Stopping…', error: 'Voice typing error · Retry' };
     const icon = { idle: 'mic', preparing: 'progress_activity', recording: 'stop', stopping: 'progress_activity', error: 'error' }[next];
     // Build SVG in the isolated world; no HTML parsing, font or resource requests.
@@ -44,9 +46,9 @@
     svg.dataset.icon = icon;
     const path = document.createElementNS(svg.namespaceURI, 'path');
     path.setAttribute('d', iconPaths[icon]); svg.append(path); button.replaceChildren(svg);
-    button.setAttribute('aria-label', labels[next]); button.setAttribute('aria-description', 'Right-click or press Shift+F10 to start with a voice graph and save it as the default.'); button.title = error || labels[next]; host.title = error || labels[next]; button.disabled = next === 'stopping';
+    button.setAttribute('aria-label', labels[next]); button.setAttribute('aria-description', 'Right-click or press Shift+F10 to start with a voice graph and save it as the default.'); button.title = diagnostic || labels[next]; host.title = diagnostic || labels[next]; button.disabled = next === 'stopping';
     button.dataset.state = next;
-    status.textContent = error || (next === 'preparing' ? 'Preparing…' : next === 'recording' ? 'Recording' : next === 'stopping' ? 'Stopping…' : '');
+    status.textContent = diagnostic || (next === 'preparing' ? 'Preparing…' : next === 'recording' ? 'Recording' : next === 'stopping' ? 'Stopping…' : '');
     position();
   }
   function position() {
@@ -116,11 +118,23 @@
     // A non-interactive status bubble stays below the mic, or above it near
     // the bottom edge. Clamp it independently of the button's hit target.
     status.style.maxWidth = `${Math.max(1, Math.min(260, bounds.right - bounds.left))}px`;
+    const top = anchor.top + controlSize + gap;
+    let above = anchor.top, below = anchor.top + controlSize;
     if (status.textContent) {
       const { width, height } = status.getBoundingClientRect();
-      const top = anchor.top + controlSize + gap;
+      const statusTop = clamp(top + height <= bounds.bottom ? top : anchor.top - gap - height, bounds.top, bounds.bottom - height);
       status.style.left = `${clamp(anchor.left + controlSize - width, bounds.left, bounds.right - width) - anchor.left}px`;
-      status.style.top = `${clamp(top + height <= bounds.bottom ? top : anchor.top - gap - height, bounds.top, bounds.bottom - height) - anchor.top}px`;
+      status.style.top = `${statusTop - anchor.top}px`;
+      above = Math.min(above, statusTop);
+      below = Math.max(below, statusTop + height);
+    }
+    if (floatingText.textContent) {
+      const roomAbove = above - gap - bounds.top, roomBelow = bounds.bottom - below - gap;
+      floatingText.style.maxWidth = `${Math.min(320, bounds.right - bounds.left)}px`;
+      floatingText.style.maxHeight = `${Math.max(0, Math.min(84, Math.max(roomAbove, roomBelow)))}px`;
+      const { width, height } = floatingText.getBoundingClientRect();
+      floatingText.style.left = `${clamp(anchor.left + controlSize - width, bounds.left, bounds.right - width) - anchor.left}px`;
+      floatingText.style.top = `${(roomAbove >= roomBelow ? above - gap - height : below + gap) - anchor.top}px`;
     }
   }
   function deliveryChanged(delivery) {
@@ -137,7 +151,7 @@
     recoveryView.update();
     if (status) status.textContent = session ? 'Delivery paused · text retained. Recording continues until Stop.' : 'Stopped · text retained for review.';
   }
-  function removeWidget() { closeMenu(); host?.remove(); host = button = status = null; if (!session) target = null; }
+  function removeWidget() { closeMenu(); host?.remove(); host = button = status = floatingText = null; if (!session) target = null; }
   function closeMenu(restore = false) {
     if (!menu) return;
     menu.remove(); menu = null; button?.setAttribute('aria-expanded', 'false'); button?.removeAttribute('aria-controls');
@@ -276,6 +290,7 @@
         span{position:absolute;width:max-content;max-width:260px;padding:3px 6px;border:1px solid #98a2b3;
           border-radius:4px;font-size:12px;line-height:1.4;overflow-wrap:anywhere;pointer-events:none}
         span:empty{display:none}
+        .floating-text{white-space:pre-wrap;overflow:hidden}
         :host([data-theme="dark"]) button,:host([data-theme="dark"]) span{color-scheme:dark;background:#202833;color:#f2f4f7;border-color:#98a2b3}
         :host([data-theme="dark"]) button:hover:not(:disabled){background:#344054}
         :host([data-theme="dark"]) button[data-state="recording"]{background:#601b16;color:#ffdad6;border-color:#fda29b}
@@ -307,6 +322,8 @@
         if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey || event.key === 'ArrowDown' && event.altKey) openMenu(event);
       });
       status = document.createElement('span'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
+      floatingText = document.createElement('span'); floatingText.className = 'floating-text';
+      floatingText.dir = 'auto';
       // Pointer activation leaves the page selection intact. Keyboard activation
       // uses the same saved field and never redirects to the widget or new focus.
       button.addEventListener('pointerdown', event => { if (event.isTrusted) event.preventDefault(); });
@@ -320,7 +337,7 @@
         }
         startCapture(event);
       });
-      shadow.append(style, button, status); document.documentElement.append(host);
+      shadow.append(style, button, status, floatingText); document.documentElement.append(host);
     }
     stateUI(session ? state : 'idle');
   }
@@ -370,9 +387,16 @@
         if (changed) { closeMenu(true); if (!session) focus(); }
       }
       if (message.type === 'pcm-ack' && session && message.capability === session.capability) session.capture.ack(message.sequence);
+      if (message.type === 'floating-display' && session && message.capability === session.capability
+          && !session.stopping && !session.cancelRequested && ['preparing', 'recording'].includes(state)
+          && floatingText && floatingText.textContent !== message.text) {
+        floatingText.textContent = message.text;
+        schedulePosition();
+      }
       if (message.type === 'state' && session && message.capability === session.capability) {
         const owner = session;
         if (message.state === 'recording') {
+          owner.notice = message.notice;
           void owner.capture.start().then(() => {
             if (session === owner && !owner.cancelRequested && !owner.stopping) stateUI('recording');
           }).catch(error => { if (session === owner) abort(error.message); });

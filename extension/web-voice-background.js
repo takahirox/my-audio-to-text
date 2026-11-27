@@ -306,6 +306,9 @@ chrome.runtime.onConnect.addListener(port => {
       }
       if (message.type === 'state' && message.state === 'recording') owner.recording = true;
       if (message.type === 'state' && ['preparing', 'recording', 'stopping', 'error'].includes(message.state)) sessionPost(owner, message);
+      if (message.type === 'floating-display' && !owner.stopRequested && typeof message.text === 'string') {
+        sessionPost(owner, { type: 'floating-display', text: message.text });
+      }
       if (message.type === 'ended') end(owner, message.error || owner.cancelError || '');
     });
     port.onDisconnect.addListener(() => {

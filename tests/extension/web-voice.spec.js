@@ -36,7 +36,8 @@ const test = base.extend({
         // Insertion assertions recognize one utterance, regardless of Chromium's fake
         // microphone tone/silence cycle or how long placement checks take.
         const singleUtterance = /^(active recording stays|closed-shadow modal|stacked modal dialogs)/.test(info.title);
-        for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture());
+        const options = /^Floating Display (shows|translation failure|text processing)/.test(info.title) ? { partial: null } : {};
+        for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture(options));
       }
       if (info.title.includes('transport measurements')) {
         // Opt into the production worklet timestamps for the concurrent Live
@@ -98,7 +99,7 @@ const test = base.extend({
         window.Worker = class extends NativeWorker {
           constructor(...args) {
             super(...args);
-            this.released = false; window.voiceResources.workers.push(this);
+            this.url = String(args[0]); this.released = false; window.voiceResources.workers.push(this);
             this.addEventListener('message', ({ data }) => { if (data.type === 'final') { const item = { id: data.id, text: data.text }; window.voiceFinals.push(item); console.debug('voice-test-final:' + JSON.stringify(item)); } });
           }
           postMessage(data, ...rest) {
@@ -197,12 +198,14 @@ async function inspectControl(t, focus = false) {
     const { result } = await cdp.send('Runtime.callFunctionOn', { objectId: object.objectId, returnByValue: true, arguments:[{ value:focus }],
       functionDeclaration: `function(focus) {
         const button = this.querySelector('button'), svg = button.querySelector('svg'), status = this.querySelector('span');
+        const preview = this.querySelector('.floating-text');
         if (focus) button.focus();
         const style = getComputedStyle(button), motion = getComputedStyle(svg);
         const rect = element => { const r = element.getBoundingClientRect(); return { x:r.x, y:r.y, width:r.width, height:r.height }; };
         return { icon:svg.dataset.icon, path:svg.firstChild.getAttribute('d'), viewBox:svg.getAttribute('viewBox'),
           ariaHidden:svg.getAttribute('aria-hidden'), focusable:svg.getAttribute('focusable'), text:button.textContent,
           label:button.getAttribute('aria-label'), title:button.title, disabled:button.disabled, status:status.textContent,
+          preview:{ text:preview.textContent, elements:preview.childElementCount, box:rect(preview) },
           button:rect(button), svg:rect(svg), bubble:rect(status), bubbleClip:getComputedStyle(status).clipPath, theme:this.host.dataset.theme,
           circle:style.borderRadius, display:style.display, align:style.alignItems, justify:style.justifyContent,
           padding:style.padding, boxSizing:style.boxSizing, appearance:style.appearance, lineHeight:style.lineHeight,
@@ -952,6 +955,197 @@ test('already granted input and textarea dictation stays in place, drains exactl
   await writeFile(info.outputPath('offscreen-voice-evidence.json'), JSON.stringify({ realModel: real,
     ...(await realEvidence(t)), browser: t.context.browser().version(), microphone: 'native gUM, fake device, CDP permission grant; native bubble buttons not automated',
     evidence, remoteRequests: t.remote, errors: t.pageErrors }, null, 2));
+});
+
+test('Floating Display shows the page session’s latest text and clears while final insertion drains', async ({ voice: t }) => {
+  test.skip(real);
+  await t.library.evaluate(async id => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge } = await import('./graph.js');
+    const entry = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    entry.graph.nodes.push(graphNode('FloatingDisplay', 'preview'));
+    entry.graph.edges.push(edge('asr', 'provisional', 'preview', 'text'));
+    await new GraphLibrary(localStorage).save(id, entry.revision, entry.graph);
+  }, t.graphId);
+  await enable(t);
+  await t.website.setViewportSize({ width: 360, height: 190 });
+  await start(t); await recording(t);
+  const r = await runtime(t);
+  try {
+    expect(await r.evaluate(() => voiceResources.workers.filter(worker => !worker.released).length)).toBe(1);
+    const emit = (type, id, text) => r.evaluate(message => {
+      voiceResources.workers.find(worker => !worker.released).postMessage(message);
+    }, { type, id, text });
+    const snapshot = async () => (await inspectControl(t)).preview.text;
+    await emit('fixture-partial', 0, 'first hypothesis');
+    await expect.poll(snapshot).toBe('first hypothesis');
+    const text = '<b>東京🙂</b> '.repeat(55).trim();
+    await emit('fixture-partial', 0, text);
+    // The preview text changes before the next animation frame repositions it.
+    await expect(async () => {
+      const ui = await inspectControl(t);
+      expect(ui.preview.text).toBe(text);
+      expect(ui.preview.elements).toBe(0);
+      expect(ui.preview.box.height).toBeGreaterThan(0);
+      expect(ui.preview.box.height).toBeLessThanOrEqual(84);
+      expect(ui.preview.box.x).toBeGreaterThanOrEqual(0);
+      expect(ui.preview.box.y).toBeGreaterThanOrEqual(0);
+      expect(ui.preview.box.x + ui.preview.box.width).toBeLessThanOrEqual(360);
+      expect(ui.preview.box.y + ui.preview.box.height).toBeLessThanOrEqual(190);
+      expect(intersects(ui.preview.box, ui.button)).toBe(false);
+      expect(intersects(ui.preview.box, ui.bubble)).toBe(false);
+    }).toPass({ timeout: 5000 });
+    await expect(t.website.locator('#first')).toBeFocused();
+    await expect(t.website.locator('#first')).toHaveValue('before after');
+
+    await emit('fixture-final', 0, 'committed ');
+    await expect.poll(snapshot).toBe('');
+    await expect(t.website.locator('#first')).toHaveValue('before committed after');
+    await emit('fixture-partial', 1, 'before Stop');
+    await expect.poll(snapshot).toBe('before Stop');
+    await stop(t); await idle(t);
+    expect(await snapshot()).toBe('');
+
+    await start(t, '#second'); await recording(t);
+    expect(await snapshot()).toBe('');
+    await toolbarVoice(t, false); await idle(t);
+    await expect(widget(t.website)).toHaveCount(0);
+  } finally { await r.detach(); }
+});
+
+test('Floating Display text processing rejects an empty preview while final insertion continues', async ({ voice: t }) => {
+  test.skip(real);
+  await writeFile(path.join(t.root, 'web/text-summary-worker.js'), `self.onmessage = ({ data }) => {
+    if (data.type === 'load') postMessage({ type: 'ready', id: data.id });
+    if (data.type === 'process') postMessage({ type: 'result', id: data.id, result: 'processed ' + data.inputs[0] });
+  };`);
+  await t.library.evaluate(async id => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge } = await import('./graph.js');
+    const { revision, graph } = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    graph.nodes.push(graphNode('TextProcessingLfm2', 'processor'), graphNode('FloatingDisplay', 'preview'));
+    graph.edges.push(edge('asr', 'provisional', 'processor', 'input1'), edge('processor', 'result', 'preview', 'text'));
+    await new GraphLibrary(localStorage).save(id, revision, graph);
+  }, t.graphId);
+  await enable(t);
+  await start(t); await recording(t);
+  const r = await runtime(t);
+  try {
+    const emit = (type, id, text) => r.evaluate(message => {
+      voiceResources.workers.find(worker => !worker.released && worker.url.endsWith('moonshine-small-ja-worker.js')).postMessage(message);
+    }, { type, id, text });
+    const field = t.website.locator('#first');
+    await emit('fixture-partial', 0, 'first hypothesis');
+    await expect.poll(async () => (await inspectControl(t)).preview.text).toBe('processed first hypothesis');
+    await expect(field).toHaveValue('before after');
+
+    // The ASR clears the provisional input as it delivers this final.
+    await emit('fixture-final', 0, 'first ');
+    await expect(field).toHaveValue('before first after');
+    await expect.poll(async () => (await inspectControl(t)).status).toMatch(/^Preview · processor: .*Text processing needs nonempty combined input/);
+    await recording(t);
+    expect(await inspectControl(t)).toMatchObject({ icon: 'stop', disabled: false });
+    await emit('fixture-final', 1, 'second ');
+    await expect(field).toHaveValue('before first second after');
+    await expect(field).toBeFocused();
+    await stop(t); await idle(t);
+    expect((await inspectControl(t)).preview.text).toBe('');
+  } finally { await r.detach(); }
+});
+
+for (const { scenario, shared, preview, warning } of [
+  { scenario: 'preview-only worker rejection', shared: false, preview: 'bad preview', warning: 'Controlled preview rejection' },
+  { scenario: 'shared worker rejection', shared: true, preview: 'bad preview', warning: 'Controlled preview rejection' },
+  { scenario: 'shared input over the character limit', shared: true, preview: 'x'.repeat(1001), warning: 'Provisional translation accepts at most 1,000 characters.' },
+]) test(`Floating Display translation failure (${scenario}) keeps final insertion active`, async ({ voice: t }) => {
+  test.skip(real);
+  const bytes = Buffer.from('controlled PLaMo weights');
+  await writeFile(path.join(t.root, 'extension/plamo-fixture.bin'), bytes);
+  await writeFile(path.join(t.root, 'extension/plamo-assets.json'), JSON.stringify([{
+    path: 'plamo-3-translate-2b-Q4_K_M.gguf', bytes: bytes.length,
+    sha256Chunks: [createHash('sha256').update(bytes).digest('hex')], sourceURL: t.url + 'plamo-fixture.bin',
+  }]));
+  await writeFile(path.join(t.root, 'web/plamo-worker.js'), `self.onmessage = ({ data }) => {
+    if (data.type === 'load') postMessage({ type: 'ready', id: data.id });
+    if (data.type === 'translate') postMessage(data.text === 'bad preview'
+      ? { type: 'error', id: data.id, message: 'Controlled preview rejection' }
+      : { type: 'result', id: data.id, texts: ['translated ' + data.text] });
+    if (data.type === 'drain') postMessage({ type: 'drained', id: data.id });
+  };`);
+  await t.library.evaluate(async ({ id, shared }) => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge } = await import('./graph.js');
+    const { prepareGraphModelAssets } = await import('./graph-model-preparation.js');
+    const { revision, graph } = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    graph.nodes.push(graphNode('Plamo3Translate2B', 'translate'), graphNode('FloatingDisplay', 'preview'));
+    graph.edges.push(edge('asr', 'provisional', 'translate', shared ? 'provisional' : 'text'),
+      edge('translate', shared ? 'provisionalText' : 'text', 'preview', 'text'));
+    if (shared) {
+      graph.edges[1] = edge('asr', 'final', 'translate', 'text');
+      graph.edges.push(edge('translate', 'text', 'field', 'text'));
+    }
+    await prepareGraphModelAssets(graph);
+    await new GraphLibrary(localStorage).save(id, revision, graph);
+  }, { id: t.graphId, shared });
+  await enable(t);
+  await start(t); await recording(t);
+  const r = await runtime(t);
+  try {
+    const emit = (type, id, text) => r.evaluate(message => {
+      voiceResources.workers.find(worker => !worker.released && worker.url.endsWith('moonshine-small-ja-worker.js')).postMessage(message);
+    }, { type, id, text });
+    const field = t.website.locator('#first'), prefix = shared ? 'translated ' : '';
+    await emit('fixture-final', 0, 'first ');
+    await expect(field).toHaveValue(`before ${prefix}first after`);
+    await emit('fixture-partial', 1, preview);
+    await expect.poll(async () => (await inspectControl(t)).status).toBe(`Preview · translate: Translation unavailable: ${warning}`);
+    await recording(t);
+    expect(await inspectControl(t)).toMatchObject({ icon: 'stop', disabled: false });
+    await expect(field).toHaveValue(`before ${prefix}first after`);
+    await emit('fixture-final', 1, 'second ');
+    await expect(field).toHaveValue(`before ${prefix}first ${prefix}second after`);
+    await expect(field).toBeFocused();
+    await stop(t); await idle(t);
+  } finally { await r.detach(); }
+});
+
+test('Floating Display keeps Live controls visible with long plain text in a short viewport', async ({ voice: t }) => {
+  test.skip(real);
+  const text = '<b>Live text</b> '.repeat(55).trim();
+  const id = await t.library.evaluate(async text => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge, GRAPH_VERSION } = await import('./graph.js');
+    const literal = graphNode('Text', 'literal');
+    literal.settings.value = text;
+    const graph = { version: GRAPH_VERSION, nodes: [literal, graphNode('FloatingDisplay', 'preview')],
+      edges: [edge('literal', 'value', 'preview', 'text')] };
+    const next = await new GraphLibrary(localStorage).create({ name: 'Floating preview', graph }, readLibrary(localStorage).revision);
+    return next.graphs.at(-1).id;
+  }, text);
+  const live = await t.context.newPage();
+  await live.setViewportSize({ width: 390, height: 240 });
+  await live.goto(t.url + 'recorder.html?graph=' + id);
+  await expect(live.locator('#model-status')).toHaveText('Ready');
+  const preview = live.locator('#floating-text');
+  const stop = live.getByRole('button', { name: 'Stop' });
+  const status = live.locator('#session-state');
+  await expect(preview).toBeHidden();
+  await live.locator('#start').click();
+  await expect(preview).toHaveText(text);
+  await expect(preview).toBeVisible();
+  await expect(preview).toBeInViewport();
+  await expect(preview.locator('b')).toHaveCount(0);
+  await expect(status).toHaveText('Running');
+  const [previewBox, stopBox, statusBox] = await Promise.all([preview.boundingBox(), stop.boundingBox(), status.boundingBox()]);
+  expect(previewBox.height).toBeLessThanOrEqual(96);
+  for (const control of [stopBox, statusBox]) {
+    expect(control.y).toBeGreaterThanOrEqual(0);
+    expect(control.y + control.height).toBeLessThanOrEqual(240);
+    expect(intersects(previewBox, control)).toBe(false);
+  }
+  await stop.click();
+  await expect(preview).toBeEmpty();
+  await expect(preview).toBeHidden();
 });
 
 test('first site grant and already granted capture create zero visible pages', async ({ voice: t }) => {

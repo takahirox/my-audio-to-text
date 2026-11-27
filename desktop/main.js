@@ -61,14 +61,17 @@ function publish() {
 
 function showIndicator() {
   const state = controller.state;
+  const text = controller.current?.floatingText ?? '';
+  send(indicator, 'indicator:update', { ...state, text });
   if (state.phase === 'canceling' || (state.phase === 'idle' && !state.error)) {
     indicator?.hide();
     return;
   }
   const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const width = state.error ? 430 : 226, height = state.error ? 120 : 52;
-  indicator.setBounds({ width, height, x: workArea.x + workArea.width - width - 16, y: workArea.y + workArea.height - height - 16 });
-  send(indicator, 'indicator:update', state);
+  const width = state.error || text ? 430 : 226, height = (state.error ? 120 : 52) + (text ? 80 : 0);
+  const bounds = { width, height, x: workArea.x + workArea.width - width - 16, y: workArea.y + workArea.height - height - 16 };
+  const previous = indicator.getBounds();
+  if (Object.keys(bounds).some(key => bounds[key] !== previous[key])) indicator.setBounds(bounds);
   if (!indicator.isVisible()) indicator.showInactive();
 }
 
@@ -338,6 +341,7 @@ function bindIPC() {
   fromRuntime('failure', (id, message) => { void controller.cancel(String(message).slice(0, 700), id); });
   fromRuntime('capture-ended', id => controller.captureEnded(id));
   fromRuntime('display', (...args) => controller.display(...args));
+  fromRuntime('floating-display', (id, text) => controller.floatingDisplay(id, text));
   fromRuntime('model-progress', progress => { modelView = progress; send(management, 'management:model', progress); });
   fromIndicator('stop', () => { if (controller.current) toggle(); });
   fromIndicator('dismiss', () => controller.update({ error: '' }));
@@ -386,7 +390,7 @@ else {
       },
     });
     target.connect();
-    controller = new DesktopSession({ target, run, onChange: updateSession, onDisplay: item => {
+    controller = new DesktopSession({ target, run, onChange: updateSession, onFloatingDisplay: showIndicator, onDisplay: item => {
       displayItems.set(JSON.stringify([item.node, item.port]), item);
       send(management, 'management:display', item);
     } });

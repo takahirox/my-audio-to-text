@@ -20,7 +20,7 @@ const categoryTypes = {
     'TextFormatter', 'TextAccumulator', 'TextSlidingWindow', 'TextWindow', 'Hold',
     'KeyedTextPair', 'KeyedTextCoalesce', 'KeyedPairedTextAccumulator',
   ],
-  'Outputs': ['Display', 'SpeakerOutput', 'AudioOutput', 'FocusedInputTextOutputNode'],
+  'Outputs': ['Display', 'FloatingDisplay', 'SpeakerOutput', 'AudioOutput', 'FocusedInputTextOutputNode'],
   'Subgraphs': [],
 };
 export const PALETTE_CATEGORIES = Object.freeze(Object.keys(categoryTypes));

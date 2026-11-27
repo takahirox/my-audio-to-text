@@ -59,7 +59,7 @@ export class TranslationSchedulerNode {
     if (job.provisional && job.revision !== this.revision) return;
     // Per-utterance validation errors must reach diagnostics even when the
     // generic formatter (or any other consumer) leaves error disconnected.
-    if (error && !this.error) this.onState(`Translation unavailable: ${error}`, 'error');
+    if (error && !this.error) this.onState(`Translation unavailable: ${error}`, 'error', { provisional: job.provisional === true });
     const [sourcePort, textPort, errorPort, idPort] = this.outputGroups[job.provisional ? 1 : 0];
     (job.context || this.context).emitOutputs({ ...(job.id === undefined ? {} : { [idPort]: job.id }), [sourcePort]: job.source, [errorPort]: error, ...(error ? {} : { [textPort]: text }) }, { provisional: job.provisional === true });
   }
@@ -103,7 +103,6 @@ export class TranslationSchedulerNode {
   }
   receive(port, value, context = this.context) { return this.receiveInputs({ [port]: value }, context); }
   accept(port, source, context, id) {
-    if (port === 'provisional' && source.length > 1000) throw Error('Provisional translation accepts at most 1,000 characters.');
     this.revision++;
     const snapshot = { ...(id === undefined ? {} : { id }), ...(this.acceptsContext ? { translationContext: this.translationContext } : {}),
       ...(this.acceptsLanguages ? { languages: this.languages } : {}) };
@@ -118,8 +117,14 @@ export class TranslationSchedulerNode {
       return { source, ...snapshot, context: work.context, complete: work.complete };
     };
     if (port === 'provisional') {
+      this.previewId = id; this.hasPreview = true;
+      if (source.length > 1000) {
+        this.emit({ source, id, context, provisional: true, revision: this.revision }, undefined,
+          'Provisional translation accepts at most 1,000 characters.');
+        return;
+      }
       this.preview = { ...own(), provisional: true, revision: this.revision };
-      this.previewId = id; this.hasPreview = true; this.pump(); return;
+      this.pump(); return;
     }
     this.clearPreview(context);
     // Bound closed work too. Overflow is an explicit branch failure, never a
