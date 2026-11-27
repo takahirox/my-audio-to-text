@@ -1,5 +1,0 @@
-:root { color-scheme: dark; font: 14px system-ui, sans-serif; }
-body { margin: 0; padding: 9px 12px; display: flex; gap: 12px; align-items: center; background: #171a22; color: #f6f7fa; }
-p { margin: 0; flex: 1; overflow-wrap: anywhere; }
-body[data-recording="true"] p::before { content: ''; display: inline-block; background: #fa6868; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
-button { font: inherit; padding: 6px 9px; cursor: pointer; }
