@@ -26,7 +26,7 @@ test('primitive ports, no Settings, generic Help and runtime contract agree', ()
   assert.deepEqual(graphNode('KeyedTextCoalesce', 'select').settings, {});
   for (const key of ['settings', 'numberSettings', 'textSettings']) assert.equal(definition[key], undefined);
   assert.match(definition.help, /Number.value/); assert.match(definition.help, /independent/);
-  assert.match(readFileSync(new URL('../scripts/build-extension.py', import.meta.url), 'utf8'), /"keyed-text-coalesce-node.js"/);
+  assert.match(readFileSync(new URL('../scripts/graph_assets.py', import.meta.url), 'utf8'), /"keyed-text-coalesce-node.js"/);
 });
 
 for (const order of [[1, 2], [2, 1]]) test(`priority, absent/empty, duplicates and whitespace (${order})`, () => {

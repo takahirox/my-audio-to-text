@@ -39,15 +39,22 @@
         <button id="back">Back to graphs</button>
       </header>
       <div id="graph-editor"></div>
+      <div id="editor-models" class="actions" aria-label="Graph models" hidden></div>
     </section>
     <section id="models" aria-labelledby="models-title" hidden>
       <h2 id="models-title">Models</h2>
+      <div class="actions">
+        <label for="model-picker">Model</label>
+        <select id="model-picker"></select>
+      </div>
       <article class="panel model-card">
         <div class="section-heading">
-          <h3>Moonshine Small Streaming Japanese</h3>
+          <h3 id="model-title"></h3>
           <span id="model-status" class="model-status" role="status"></span>
         </div>
-        <p class="muted">Japanese · CPU / WASM · 122 MB</p>
+        <p id="model-size" class="muted"></p>
+        <p id="model-requirements"></p>
+        <details><summary>License and source</summary><pre id="model-license"></pre></details>
         <progress id="model-progress" aria-label="Model preparation" hidden></progress>
         <p id="model-error" class="model-error" role="alert"></p>
         <div class="actions">
@@ -65,9 +72,19 @@
         <button class="primary" id="start-live">Start</button>
         <button id="stop-live" hidden>Stop</button>
         <button id="cancel-live" hidden>Cancel</button>
+        <button id="enable-speakers" hidden>Enable speaker</button>
         <span id="live-state" role="status"></span>
       </div>
+      <div id="live-models" class="actions" aria-label="Graph models" hidden></div>
+      <p id="preparation" role="status" hidden></p>
+      <progress id="preparation-progress" aria-label="Graph model preparation" hidden></progress>
+      <section class="panel" id="live-actions" aria-labelledby="live-actions-title" hidden>
+        <h3 id="live-actions-title">Graph Actions</h3>
+        <div class="actions" id="live-action-buttons"></div>
+      </section>
+      <ul id="node-status" aria-label="Node status" aria-live="polite" hidden></ul>
       <div id="displays"></div>
+      <div id="audio-outputs"></div>
     </section>
     <section id="settings" aria-labelledby="settings-title" hidden>
       <h2 id="settings-title">Settings</h2>

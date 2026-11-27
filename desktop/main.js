@@ -3,7 +3,11 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { DesktopLibrary } from './library.js';
-import { assertDesktopGraph, planGraph } from './graph.js';
+import { planGraph } from './graph.js';
+import { exportDraft } from '../extension/graph-library.js';
+import { audioToWav } from '../web/synthesized-audio.js';
+import { desktopModels } from './models.js';
+import { fetchPinnedModelAsset } from './model-transport.js';
 import { DesktopSession } from './session.js';
 import { FocusedTarget } from './focused-target.js';
 
@@ -11,11 +15,14 @@ const root = resolve(import.meta.dirname, '..');
 const origin = 'local-voice://desktop';
 const appURL = page => `${origin}/desktop/${page}.html`;
 const icon = join(root, 'extension/icons/icon-32.png');
-const csp = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://download.moonshine.ai; base-uri 'none'; frame-ancestors 'none'";
+const csp = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src blob:; base-uri 'none'; frame-ancestors 'none'";
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
-const files = JSON.parse(readFileSync(join(root, 'extension/moonshine-small-ja-assets.json'), 'utf8')).files;
-const modelURLs = new Set(files.map(file => file.sourceURL));
+  '.css': 'text/css', '.wasm': 'application/wasm', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml',
+  '.txt': 'text/plain', '.jinja': 'text/plain', '.gz': 'application/gzip' };
+const modelSources = JSON.parse(readFileSync(join(import.meta.dirname, 'model-sources.json'), 'utf8'));
+const sourcesFor = keys => new Map(keys.flatMap(key => Object.entries(modelSources[key])));
+const modelActivity = () => modelOperation && { key: modelOperation.key, action: modelOperation.action };
+const defaultModel = 'moonshine-small-ja';
 const mac = process.platform === 'darwin';
 
 app.setName('My Audio to Text');
@@ -26,11 +33,11 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'local-voice', privileges: {
 } }]);
 
 let library, controller, target, tray, runtime, management, indicator, runtimeReady;
-let modelView, shortcutError = '', registeredShortcut, quitting = false, shutDown = false;
-let modelOperation, shortcutChanging = false, runtimeSequence = 0;
+let shortcutError = '', registeredShortcut, quitting = false, shutDown = false;
+let modelOperation, graphDownload, shortcutChanging = false, runtimeSequence = 0, audioSequence = 0;
 let shortcutSession, shortcutContext = 0;
 let trayMenu;
-const pendingCommands = new Map(), displayItems = new Map();
+const pendingCommands = new Map(), displayItems = new Map(), audioItems = new Map(), modelViews = new Map();
 
 function isFrom(event, window, page) {
   return window && !window.isDestroyed() && event.sender === window.webContents
@@ -42,8 +49,10 @@ function send(window, channel, value) {
 }
 
 function view() {
-  return { library: library.value, session: controller.state, shortcutError, model: modelView, platform: process.platform,
-    items: [...displayItems.values()] };
+  const session = { ...controller.state, modelKeys: controller.current?.plan.modelKeys || [] };
+  return { library: library.value, session, shortcutError, models: Object.fromEntries(modelViews), modelOperation: modelActivity(),
+    platform: process.platform, items: [...displayItems.values()],
+    nodeStatus: [...(controller.current?.status.values() || [])], preparation: controller.current?.preparation };
 }
 
 function statusText() {
@@ -63,7 +72,7 @@ function showIndicator() {
   const state = controller.state;
   const text = controller.current?.floatingText ?? '';
   send(indicator, 'indicator:update', { ...state, text });
-  if (state.phase === 'canceling' || (state.phase === 'idle' && !state.error)) {
+  if ((state.phase === 'canceling' && !state.microphone) || (state.phase === 'idle' && !state.error)) {
     indicator?.hide();
     return;
   }
@@ -84,7 +93,7 @@ function updateTray() {
     ...(state.phase === 'running' || state.phase === 'stopping' ? [
       { label: 'Cancel voice typing', click: () => { void controller.cancel(); } },
     ] : []),
-    { label: 'Shortcut graph', submenu: library.value.graphs.map(entry => ({
+    { label: 'Shortcut graph', submenu: library.value.graphs.filter(entry => entry.kind !== 'subgraph').map(entry => ({
       label: entry.name, type: 'radio', checked: entry.id === library.value.selected,
       click: () => { try { library.select(entry.id); publish(); } catch (error) { controller.update({ error: error.message }); } },
     })) },
@@ -108,9 +117,13 @@ function showManagement(page) {
 function start(id, mode) {
   if (controller.current || quitting) return;
   try {
-    const plan = planGraph(library.lookup(id).graph, mode);
-    if (modelOperation === 'modelDelete') throw Error('Wait for model deletion to finish, then start again.');
+    const entry = library.lookup(id);
+    if (entry.kind === 'subgraph') throw Error('Choose a parent graph to run.');
+    const plan = planGraph(entry.graph, mode, library.value.graphs);
+    if (modelOperation?.action === 'modelDelete') throw Error('Wait for model deletion to finish, then start again.');
+    if (modelOperation?.action === 'modelPrepare') throw Error('Finish or cancel the Models download before starting a graph.');
     displayItems.clear();
+    audioItems.clear();
     return controller.start(plan);
   } catch (error) { controller.update({ error: error.message }); }
 }
@@ -129,7 +142,10 @@ function trayToggle() {
 }
 
 function updateSession() {
-  const id = controller.current?.id;
+  const { id, preparation } = controller.current || {};
+  if (controller.state.phase === 'canceling' && ['Checking', 'Downloading'].includes(preparation?.state)) {
+    modelViews.set(preparation.key, { ...modelViews.get(preparation.key), state: 'Canceled', error: 'Model preparation canceled. Retry to finish downloading.' });
+  }
   if (!quitting && id !== shortcutSession) {
     // A held shortcut belongs to the session or idle period where it began.
     shortcutSession = id;
@@ -184,14 +200,22 @@ function makeWindow(page, options) {
 async function installProtocol() {
   await protocol.handle('local-voice', async request => {
     const url = new URL(request.url);
+    if (url.host === 'desktop' && url.pathname === '/model-asset') {
+      const preparation = graphDownload || modelOperation?.download;
+      if (!preparation) return new Response(null, { status: 404 });
+      return fetchPinnedModelAsset(request, preparation.sources, preparation.controller.signal);
+    }
     const path = resolve(root, '.' + decodeURIComponent(url.pathname));
     const contentType = mime[extname(path)];
     if (url.host !== 'desktop' || request.method !== 'GET' || !path.startsWith(root + sep) || !contentType
         || !/^\/(desktop|extension|web)\//.test(url.pathname)) return new Response(null, { status: 404 });
     try {
+      // Open JTalk accepts a URL for the voice bytes read from verified storage.
+      const policy = url.pathname === '/web/kokoro-worker.js'
+        ? csp.replace("connect-src 'self'", "connect-src 'self' blob:") : csp;
       return new Response(await readFile(path), { headers: {
         'Content-Type': contentType,
-        'Content-Security-Policy': csp,
+        'Content-Security-Policy': policy,
         'Cross-Origin-Opener-Policy': 'same-origin',
         'Cross-Origin-Embedder-Policy': 'require-corp',
         'X-Content-Type-Options': 'nosniff',
@@ -199,8 +223,11 @@ async function installProtocol() {
     } catch { return new Response(null, { status: 404 }); }
   });
   const profile = session.defaultSession;
-  profile.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (details, done) => {
-    done({ cancel: details.method !== 'GET' || details.webContentsId !== runtime?.webContents.id || !modelURLs.has(details.url) });
+  profile.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, done) => {
+    // Downloads cross only the model transport route from the hidden runtime.
+    const external = /^(?:https?|wss?):/.test(details.url);
+    const model = details.url.startsWith(`${origin}/model-asset?`);
+    done({ cancel: external || (model && details.webContentsId !== runtime?.webContents.id) });
   });
   const canCapture = (contents, permission, mediaTypes) => runtime && !runtime.isDestroyed() && contents === runtime.webContents
     && permission === 'media' && mediaTypes?.length === 1 && mediaTypes[0] === 'audio'
@@ -217,20 +244,21 @@ async function installProtocol() {
 async function run(action, ...args) {
   const window = runtime;
   if (quitting && !['cancel', 'modelCancel'].includes(action)) throw Error('Desktop is quitting.');
-  if (mac && action === 'start' && controller.current?.id === args[0] && controller.current.plan.microphone) {
-    const status = systemPreferences.getMediaAccessStatus('microphone');
-    const allowed = status === 'granted'
-      || (status === 'not-determined' && await systemPreferences.askForMediaAccess('microphone'));
-    if (!allowed) throw Error('Allow microphone access in System Settings → Privacy & Security → Microphone, then start again.');
-    if (quitting || controller.current?.id !== args[0] || controller.state.phase !== 'preparing') return;
-  }
+  if (action === 'cancel') graphDownload?.controller.abort();
+  if (action === 'modelCancel') modelOperation?.download?.controller.abort();
   await runtimeReady;
   if (window !== runtime || window.isDestroyed()) throw Error('The local graph runtime closed.');
+  if (action === 'start' && (controller.current?.id !== args[0] || controller.state.phase !== 'preparing')) return;
   const request = ++runtimeSequence;
+  const download = action === 'start' ? {
+    controller: new AbortController(), sources: sourcesFor(controller.current.plan.modelKeys),
+  } : null;
+  if (download) graphDownload = download;
+  const timeout = ['start', 'modelPrepare'].includes(action) ? 3_600_000 : action === 'press' ? 300_000 : 180_000;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       resetRuntime('The local graph runtime did not respond and was restarted.');
-    }, action === 'modelPrepare' ? 900000 : 90000);
+    }, timeout);
     pendingCommands.set(request, ({ error, value }) => {
       clearTimeout(timer);
       pendingCommands.delete(request);
@@ -238,6 +266,11 @@ async function run(action, ...args) {
       else resolve(value);
     });
     send(window, 'runtime:command', { request, action, args });
+  }).finally(() => {
+    if (download && graphDownload === download) {
+      download.controller.abort();
+      graphDownload = null;
+    }
   });
 }
 
@@ -268,12 +301,14 @@ function createRuntime() {
 
 function resetRuntime(error) {
   const old = runtime;
+  graphDownload?.controller.abort();
+  modelOperation?.download?.controller.abort();
   old.destroy();
   for (const complete of pendingCommands.values()) complete({ error });
   if (!quitting) {
     createRuntime();
     if (controller.current) void controller.cancel(error);
-    else if (!['modelStatus', 'modelPrepare'].includes(modelOperation)) controller.update({ error });
+    else if (!['modelStatus', 'modelPrepare'].includes(modelOperation?.action)) controller.update({ error });
   }
 }
 
@@ -290,15 +325,23 @@ function bindIPC() {
   const fromIndicator = (name, handler) => listen('indicator', () => indicator, `indicator:${name}`, handler);
 
   ui('get', view);
-  ui('add', (name, graph) => { const entry = library.add(name, graph); publish(); return entry; });
+  ui('add', (name, graph, kind) => {
+    if (kind !== undefined && kind !== 'subgraph') throw Error('Unknown graph kind.');
+    const entry = library.add(name, graph, kind); publish(); return entry;
+  });
+  ui('import', (name, value) => { const entry = library.import(name, value); publish(); return entry; });
+  ui('extract', (id, revision, shared) => { const result = library.extract(id, revision, shared); publish(); return result; });
   ui('save', (id, revision, graph) => { const entry = library.save(id, revision, graph); publish(); return entry; });
-  ui('export', async graph => {
-    const valid = assertDesktopGraph(graph);
+  ui('export', async (graph, id) => {
+    const entry = id === undefined ? { id: 'graph', name: 'Graph', description: '' } : library.lookup(id);
+    const json = exportDraft({ ...entry, description: entry.description ?? '' }, graph, library.value);
     const result = await dialog.showSaveDialog(management, {
       title: 'Export graph JSON', defaultPath: 'processing-graph.json',
       filters: [{ name: 'Graph JSON', extensions: ['json'] }],
     });
-    if (!result.canceled && result.filePath) await writeFile(result.filePath, JSON.stringify(valid, null, 2) + '\n', { mode: 0o600 });
+    if (!result.canceled && result.filePath) {
+      await writeFile(result.filePath, json, { mode: 0o600 });
+    }
   });
   ui('select', id => { library.select(id); publish(); });
   ui('shortcut', async value => {
@@ -313,36 +356,97 @@ function bindIPC() {
   ui('live', id => { if (typeof id === 'string') void start(id, 'live'); });
   ui('stop', () => { void controller.stop(); });
   ui('cancel', () => { void controller.cancel(); });
-  ui('model', async action => {
-    if (!['modelStatus', 'modelPrepare', 'modelCancel', 'modelDelete'].includes(action)) throw Error('Unknown model action.');
-    if (action === 'modelCancel') return run(action);
+  ui('press', (id, node) => {
+    if (controller.state.phase === 'running' && controller.current?.id === id
+        && controller.current.plan.actions.some(action => action.id === node)) return run('press', id, node);
+  });
+  ui('enable-speakers', id => {
+    if (controller.current?.id === id && ['running', 'stopping'].includes(controller.state.phase)) return run('enableSpeakers', id);
+  });
+  ui('audio', () => [...audioItems.values()]);
+  ui('save-wav', async clip => {
+    const audio = audioItems.get(clip)?.audio;
+    if (!audio) return;
+    const result = await dialog.showSaveDialog(management, {
+      title: 'Save WAV', defaultPath: 'speech.wav', filters: [{ name: 'WAV audio', extensions: ['wav'] }],
+    });
+    if (!result.canceled && result.filePath) await writeFile(result.filePath, new Uint8Array(await audioToWav(audio).arrayBuffer()), { mode: 0o600 });
+  });
+  const updateModel = (key, value, reset = false) => {
+    if (reset) modelViews.clear();
+    modelViews.set(key, value);
+    send(management, 'management:model', { key, value, operation: modelActivity(), reset });
+  };
+  ui('model', async (action, key = defaultModel) => {
+    if (!['modelStatus', 'modelPrepare', 'modelCancel', 'modelDelete'].includes(action)
+        || !desktopModels.some(model => model.key === key)) throw Error('Unknown model action or model.');
+    if (action === 'modelCancel') {
+      if (modelOperation?.key === key && modelOperation.action === 'modelPrepare') return run(action);
+      return;
+    }
     if (modelOperation) {
-      if (action === 'modelStatus') return modelView;
+      if (action === 'modelStatus') return modelViews.get(key);
       throw Error('Wait for the current model operation to finish.');
     }
-    if (action === 'modelDelete' && controller.current) throw Error('Stop the active session before deleting the model.');
-    modelOperation = action;
-    try {
-      if (action === 'modelPrepare' || action === 'modelStatus') {
-        modelView = { state: 'Checking cache…' };
-        send(management, 'management:model', modelView);
-      }
-      modelView = await run(action);
-    } catch (error) {
-      if (action !== 'modelPrepare' && action !== 'modelStatus') throw error;
-      modelView = { ...modelView, state: 'Error', error: error.message };
-    } finally { modelOperation = null; }
-    if (action === 'modelStatus' && modelView.state === 'Error') modelView.retry = action;
-    send(management, 'management:model', modelView);
-    return modelView;
+    if (action !== 'modelStatus' && controller.current) throw Error('Stop the active session before changing cached models.');
+    modelOperation = { key, action };
+    if (action === 'modelPrepare') modelOperation.download = { controller: new AbortController(), sources: sourcesFor([key]) };
+    updateModel(key, { state: action === 'modelDelete' ? 'Deleting' : 'Checking' });
+    let value;
+    try { value = await run(action, key); }
+    catch (error) { value = { state: 'Error', error: error.message, retry: action }; }
+    finally {
+      modelOperation.download?.controller.abort();
+      modelOperation = null;
+    }
+    if (action === 'modelStatus' && value.state === 'Error') value.retry = action;
+    // Voice variants can share the removed files.
+    updateModel(key, value, action === 'modelDelete' && value.state !== 'Error');
+    return value;
+  });
+  handle('runtime', () => runtime, 'runtime:microphone', async id => {
+    const authorized = () => controller.current?.id === id && controller.current.plan.microphone && controller.state.phase === 'preparing';
+    if (!authorized()) throw Error('The graph is no longer authorized to request microphone access.');
+    if (mac) {
+      const status = systemPreferences.getMediaAccessStatus('microphone');
+      const allowed = status === 'granted' || (status === 'not-determined' && await systemPreferences.askForMediaAccess('microphone'));
+      if (!allowed) throw Error('Allow microphone access in System Settings → Privacy & Security → Microphone, then start again.');
+    }
+    if (!authorized()) throw Error('Microphone start was canceled.');
   });
   handle('runtime', () => runtime, 'runtime:insert', (id, text) => controller.insert(id, text));
   fromRuntime('response', result => pendingCommands.get(result.request)?.(result));
   fromRuntime('failure', (id, message) => { void controller.cancel(String(message).slice(0, 700), id); });
-  fromRuntime('capture-ended', id => controller.captureEnded(id));
+  fromRuntime('capture-state', (id, capturing, message) => {
+    if (typeof capturing === 'boolean') controller.captureState(id, capturing, typeof message === 'string' ? message.slice(0, 700) : undefined);
+  });
   fromRuntime('display', (...args) => controller.display(...args));
   fromRuntime('floating-display', (id, text) => controller.floatingDisplay(id, text));
-  fromRuntime('model-progress', progress => { modelView = progress; send(management, 'management:model', progress); });
+  fromRuntime('actions', (id, actions) => {
+    if (controller.current?.id === id && controller.current.admitted) controller.update({ actions });
+  });
+  fromRuntime('status', (id, node, message, severity, needsActivation) => {
+    if (controller.current?.id !== id || !controller.current.admitted) return;
+    const status = { node, message: String(message).slice(0, 700), severity, needsActivation: needsActivation === true };
+    controller.current.status.set(node, status);
+    send(management, 'management:node-status', status);
+  });
+  fromRuntime('preparation', (id, key, title, value) => {
+    if (controller.current?.id !== id || !controller.current.admitted) return;
+    controller.current.preparation = { key, title, ...value };
+    send(management, 'management:preparation', controller.current.preparation);
+    updateModel(key, value);
+  });
+  fromRuntime('audio', (id, node, audio) => {
+    if (controller.current?.id !== id || !controller.current.admitted
+        || !controller.current.plan.graph.nodes.some(spec => spec.id === node && spec.type === 'AudioOutput')) return;
+    const item = { clip: ++audioSequence, node, audio };
+    audioItems.set(item.clip, item);
+    send(management, 'management:audio', item);
+  });
+  fromRuntime('model-progress', (key, progress) => {
+    if (modelOperation?.key === key && modelOperation.action === 'modelPrepare') updateModel(key, progress);
+  });
   fromIndicator('stop', () => { if (controller.current) toggle(); });
   fromIndicator('dismiss', () => controller.update({ error: '' }));
 }

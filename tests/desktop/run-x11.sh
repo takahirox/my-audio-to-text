@@ -27,4 +27,4 @@ pulseaudio --daemonize=yes --exit-idle-time=-1 --log-target=syslog
 pactl load-module module-null-sink sink_name=voice_fixture rate=16000 channels=1 >/dev/null
 pactl load-module module-remap-source master=voice_fixture.monitor source_name=voice_mic channels=1 >/dev/null
 pactl set-default-source voice_mic
-node --test "$@" tests/desktop/x11.test.js
+node --test --test-concurrency=1 "$@" tests/desktop/x11.test.js tests/desktop/graph-parity.test.js

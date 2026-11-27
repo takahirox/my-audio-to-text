@@ -23,7 +23,7 @@ test('generic primitive contracts, no settings, registered in the extension bund
   for (const field of ['settings', 'numberSettings', 'textSettings']) assert.equal(NODE_TYPES.KeyedTextPair[field], undefined);
   const source = readFileSync(new URL('../web/keyed-text-pair-node.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /document|window|DOM|provisional|Settings/);
-  assert.match(readFileSync(new URL('../scripts/build-extension.py', import.meta.url), 'utf8'), /"keyed-text-pair-node.js"/);
+  assert.match(readFileSync(new URL('../scripts/graph_assets.py', import.meta.url), 'utf8'), /"keyed-text-pair-node.js"/);
 });
 test('separate branches, text-first, ID-first, ID-only, same-ID, empty, duplicates and late translation', () => {
   const { send, out } = fixture();

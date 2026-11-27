@@ -11,7 +11,7 @@ test('pinned checkpoint/tokenizer manifest, sizes and runtime; independent asset
   for(const asset of manifest.assets) { assert.match(asset.sha256,/^[a-f0-9]{64}$/);assert.ok(asset.bytes>0); }
   const script=readFileSync('scripts/prepare-correction-assets.py','utf8');
   assert.match(script,/4\.0\.0-next\.3/);assert.match(script,/1\.25\.0-dev\.20260212-1a71a5f46e/);assert.match(script,/sha256/);assert.match(script,/ROOT \/ "web" \/ "correction-assets"/);
-  assert.doesNotMatch(readFileSync('scripts/build-extension.py','utf8'),/correction-assets|correction-nodes/);
+  assert.doesNotMatch(readFileSync('scripts/graph_assets.py','utf8'),/correction-assets|correction-nodes/);
   assert.match(readFileSync('.github/workflows/pages.yml','utf8'),/npm run prepare:playground-assets/);
   assert.match(readFileSync('scripts/prepare-playground-assets.py','utf8'),/'correction-assets'/);
 });

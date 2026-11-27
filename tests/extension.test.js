@@ -306,7 +306,9 @@ test('failed toolbar selection opens only an error, restores checked state, and 
 
 test('extension artifact allowlist excludes stale weights in every runtime directory and audits all output', () => {
   const result = spawnSync('python3', ['-c', `
-import importlib.util, pathlib, tempfile, shutil, json, hashlib, struct, zlib
+import importlib.util, pathlib, tempfile, shutil, json, hashlib, struct, zlib, sys
+sys.path.insert(0, str(pathlib.Path.cwd() / "scripts"))
+import graph_assets
 spec = importlib.util.spec_from_file_location('build', 'scripts/build-extension.py')
 build = importlib.util.module_from_spec(spec); spec.loader.exec_module(build)
 original = build.ROOT
@@ -314,7 +316,7 @@ with tempfile.TemporaryDirectory() as tmp:
     root = pathlib.Path(tmp); build.ROOT = root
     shutil.copytree(original / 'extension', root / 'extension')
     (root / 'web').mkdir(); (root / 'scripts').mkdir()
-    for name in build.SHARED_FILES:
+    for name in graph_assets.SHARED_FILES:
         shutil.copy2(original / 'web' / name, root / 'web' / name)
     shutil.copytree(original / 'web/licenses', root / 'web/licenses')
     entries = []
@@ -330,8 +332,8 @@ with tempfile.TemporaryDirectory() as tmp:
     target = root / 'dist/chrome-extension'
     inventory = json.loads((target / 'asset-inventory.json').read_text())
     assert inventory['modelWeights'] == 0
-    assert not any(p.suffix in build.FORBIDDEN_SUFFIXES for p in target.rglob('*'))
-    for name in build.SHARED_FILES:
+    assert not any(p.suffix in graph_assets.FORBIDDEN_SUFFIXES for p in target.rglob('*'))
+    for name in graph_assets.SHARED_FILES:
         assert (target / 'web' / name).read_bytes() == (original / 'web' / name).read_bytes()
     manifest = json.loads((target / 'manifest.json').read_text())
     assert manifest == json.loads((original / 'extension' / 'manifest.json').read_text())

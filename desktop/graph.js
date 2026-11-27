@@ -1,17 +1,31 @@
 import { assertGraph, edge, executableGraph, graphNode, GRAPH_VERSION, NODE_TYPES } from '../extension/graph.js';
+import { graphModelRequirements } from '../extension/graph-model-preparation.js';
+import { assertSubgraph, resolveSubgraphs } from '../extension/subgraphs.js';
+import { buttonLabel } from '../web/button-node.js';
 
 export const MICROPHONE = 'MicrophoneAudio';
 export const JAPANESE_ASR = 'SpeechToTextMoonshineSmallJa';
 export const FOCUSED_OUTPUT = 'FocusedInputTextOutputNode';
 
+const modelHelp = [
+  ['Auto Save prepares 305 MB of weights', 'Prepare 305 MB of weights in Models'],
+  ['Auto Save prepares 122 MB of weights', 'Prepare 122 MB of weights in Models'],
+  ['Auto Save prepares model files; Live initializes an owned CPU WASM Worker before enabling Start.', 'Prepare model files in Models. Live initializes an owned CPU WASM Worker before processing.'],
+  ['Auto Save prepares 1.81 GB of verified GGUF data', 'Prepare 1.81 GB of verified GGUF data in Models'],
+  ['Auto Save prepares the same shared 3.112 GB cache', 'Prepare the shared 3.112 GB cache in Models'],
+  ['Auto Save prepares pinned weights; Live downloads missing files before enabling Start.', 'Prepare pinned weights in Models. Live verifies required files before processing.'],
+];
+const sharedTypes = Object.fromEntries(Object.entries(NODE_TYPES)
+  .filter(([type]) => type !== 'ChromeTabAudio')
+  .map(([type, definition]) => {
+    const help = modelHelp.reduce((text, [from, to]) => text?.replace(from, to), definition.help);
+    return [type, help === definition.help ? definition : { ...definition, help }];
+  }));
+
 export const desktopNodeTypes = Object.freeze({
-  [MICROPHONE]: { ...NODE_TYPES[MICROPHONE], help: 'Captures the default system microphone after an intentional Start.' },
-  [JAPANESE_ASR]: { ...NODE_TYPES[JAPANESE_ASR], help: 'Prepare the Japanese model in Models. Connect final for committed text or provisional for streaming hypotheses.' },
-  TextFormatter: NODE_TYPES.TextFormatter,
-  Text: NODE_TYPES.Text,
-  Display: NODE_TYPES.Display,
-  FloatingDisplay: NODE_TYPES.FloatingDisplay,
-  [FOCUSED_OUTPUT]: { ...NODE_TYPES[FOCUSED_OUTPUT], label: 'Focused application text output',
+  ...sharedTypes,
+  [MICROPHONE]: { ...sharedTypes[MICROPHONE], help: 'Captures the default system microphone after an intentional Start.' },
+  [FOCUSED_OUTPUT]: { ...sharedTypes[FOCUSED_OUTPUT], label: 'Focused application text output',
     help: 'Insert each nonempty TEXT delivery into the field focused at delivery. The default graph connects ASR final. Use the global shortcut or tray to start.' },
 });
 
@@ -28,23 +42,29 @@ export function defaultDesktopGraph() {
   ] };
 }
 
-export function assertDesktopGraph(value) {
-  if (value?.format === 'graph-bundle') throw Error('Desktop accepts individual graph JSON. Subgraph bundles are unsupported.');
-  const graph = assertGraph(value);
-  for (const node of graph.nodes) {
-    if (!Object.hasOwn(desktopNodeTypes, node.type)) throw Error(`Unsupported desktop Node: ${node.type} (${node.id}).`);
-  }
+export function assertDesktopNodes(graph) {
+  const tab = graph.nodes.find(node => node.type === 'ChromeTabAudio');
+  if (tab) throw Error(`Chrome tab audio (ChromeTabAudio, ${tab.id}) requires the Chrome extension. Remove or replace that Node in a copy of this graph.`);
   return graph;
 }
 
-export function planGraph(value, mode) {
-  const graph = executableGraph(assertDesktopGraph(value));
-  const count = type => graph.nodes.filter(node => node.type === type).length;
-  const focused = count(FOCUSED_OUTPUT);
-  if (focused > 1 || count(MICROPHONE) > 1) throw Error('Connect at most one microphone and one focused application output.');
+export function assertDesktopGraph(value, definitions = [], kind = 'graph') {
+  if (value?.format === 'graph-bundle') throw Error('Import graph dependency bundles in Graph Library.');
+  const graph = kind === 'subgraph' ? assertSubgraph(value) : assertGraph(value, definitions);
+  assertDesktopNodes(resolveSubgraphs(graph, definitions));
+  return graph;
+}
+
+export function planGraph(value, mode, definitions = []) {
+  const graph = executableGraph(resolveSubgraphs(assertDesktopGraph(value, definitions), definitions));
+  const byType = type => graph.nodes.filter(node => node.type === type);
+  const focused = byType(FOCUSED_OUTPUT).length > 0;
+  const microphone = byType(MICROPHONE).length > 0;
   if (mode === 'dictation' && !focused) throw Error('Choose a saved graph with a connected focused application output in Graph Library.');
   if (mode === 'live' && focused) throw Error('Start this graph from the global shortcut or tray.');
-  if (mode === 'live' && !count('Display') && !count('FloatingDisplay')) throw Error('Connect a source to Display or Floating Display to run this graph in Live.');
-  const displays = graph.nodes.filter(node => node.type === 'Display').map(({ id, settings }) => ({ id, settings }));
-  return { graph, microphone: count(MICROPHONE) === 1, focused: focused === 1, displays };
+  if (!graph.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
+  const displays = byType('Display').map(({ id, settings }) => ({ id, settings }));
+  const actions = byType('Button').map(({ id, settings }) => ({ id, label: buttonLabel(settings.label) }));
+  const modelKeys = graphModelRequirements(graph).map(({ key }) => key);
+  return { graph, microphone, focused, displays, actions, modelKeys };
 }

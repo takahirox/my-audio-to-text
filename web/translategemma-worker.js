@@ -1,3 +1,4 @@
+import { packagedGraphHost } from './optional-model-assets.js';
 import { translateGemmaLanguages } from './translategemma-languages.js';
 import { TRANSLATE_GEMMA } from './translation-models.js';
 import { serveTranslationWorker, translationRuntime, modelLoadError } from './translation-worker.js';
@@ -6,7 +7,7 @@ import { watchGpuDevice } from './gpu-lifecycle.js';
 
 serveTranslationWorker(async (progress, { cacheOnly = false } = {}) => {
   // Extension Workers must never use the Playground's network model loader.
-  if (self.location.protocol === 'chrome-extension:' && !cacheOnly) throw new Error('Prepare TranslateGemma weights with Save graph or Models before starting.');
+  if (packagedGraphHost() && !cacheOnly) throw new Error('Prepare TranslateGemma weights with Save graph or Models before starting.');
   // Check in the processing Worker: window support alone is insufficient.
   if (!self.navigator.gpu) throw new Error('TranslateGemma requires WebGPU in a secure browser Worker. Use a supported browser/device on HTTPS or localhost.');
   if (!await self.navigator.gpu.requestAdapter()) throw new Error('No WebGPU adapter is available for TranslateGemma on this device.');
@@ -14,7 +15,7 @@ serveTranslationWorker(async (progress, { cacheOnly = false } = {}) => {
   try {
     const { pipeline, env } = await translationRuntime();
     if (cacheOnly) {
-      if (self.location.protocol !== 'chrome-extension:') throw new Error('Extension cache requires an extension Worker.');
+      if (!packagedGraphHost()) throw new Error('Verified graph cache requires a packaged graph Worker.');
       const { cacheOnlyTranslateGemmaRuntime } = await import('../extension/translategemma-cache.js');
       await cacheOnlyTranslateGemmaRuntime(env);
     }

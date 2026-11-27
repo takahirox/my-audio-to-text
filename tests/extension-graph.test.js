@@ -125,7 +125,7 @@ test('TEXT processors retain literal rendering and fan-out without audio or ASR'
 });
 
 test('obsolete implementations are absent from packaging and disk', () => {
-  const bundle = readFileSync('scripts/build-extension.py', 'utf8');
+  const bundle = readFileSync('scripts/graph_assets.py', 'utf8');
   for (const file of ['dom-nodes.js', 'view.js', 'view-builder-node.js', 'text-display-node.js']) {
     assert.equal(existsSync(`web/${file}`), false); assert.ok(!bundle.includes(`"${file}"`));
   }

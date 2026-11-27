@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { streamingTtsWorkerFixture } from '../fixtures/inference-workers.js';
 
 const cosy = process.env.STREAMING_TTS_MODEL === 'cosyvoice3';
 const model = cosy ? 'cosyvoice3' : 'qwen3-tts';
@@ -66,14 +67,7 @@ const test = base.extend({
           }
           postMessage({maxDifference,boundaries,frames:frames.length,finite:full.every(Number.isFinite)});
         }catch(error){postMessage({error:error.message});}finally{await runtime?.dispose();}};`);
-      if (!real) await writeFile(path.join(root, `web/${cosy ? 'cosyvoice3' : 'qwen3-tts'}-worker.js`), `
-        let id, sequence;
-        const emit=()=>postMessage({type:'chunk',id,sequence:sequence++,samples:Float32Array.from({length:2400},(_,i)=>.2*Math.sin(i/10)),at:performance.timeOrigin+performance.now()});
-        self.onmessage=({data})=>{
-          if(data.type==='load')postMessage({type:'ready'});
-          if(data.type==='generate'){id=data.id;sequence=0;postMessage({type:'start',id,sampleRate:24000,channels:1,at:performance.timeOrigin+performance.now()});emit();}
-          if(data.type==='ack'&&data.id===id){if(sequence<3)setTimeout(emit,25);else setTimeout(()=>postMessage({type:'end',id,sequence,at:performance.timeOrigin+performance.now()}),200);}
-        };`);
+      if (!real) await writeFile(path.join(root, `web/${model}-worker.js`), streamingTtsWorkerFixture);
       context = await chromium.launchPersistentContext(path.join(temporary, 'profile'), {
         channel: process.env.TTS_BROWSER_CHANNEL || 'chromium', headless: true,
         ignoreDefaultArgs: ['--disable-extensions'], args: ['--enable-unsafe-extension-debugging'],

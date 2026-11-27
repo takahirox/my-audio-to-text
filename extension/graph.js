@@ -231,15 +231,15 @@ export function validateGraph(graph, optionalWarnings = false, definitions = [])
 }
 // Storage accepts unfinished branches. Execution includes only ready ancestors of
 // ready sinks; constants are roots too, so text/translation/TTS paths need no ASR.
-export function executableGraph(graph) { return selectExecutable(assertGraph(graph)); }
-function selectExecutable(description) {
+export function executableGraph(graph, { unavailable } = {}) { return selectExecutable(assertGraph(graph), unavailable); }
+function selectExecutable(description, unavailable) {
   const ready = new Set(), incoming = new Map(description.nodes.map(node => [node.id, []]));
   for (const route of description.edges) incoming.get(route.to[0]).push(route);
   let changed = true;
   while (changed) {
     changed = false;
     for (const node of description.nodes) {
-      if (ready.has(node.id)) continue;
+      if (ready.has(node.id) || unavailable?.has(node.id)) continue;
       const definition = nodeDefinition(node, description), routes = incoming.get(node.id);
       const available = port => routes.some(route => route.to[1] === port && ready.has(route.from[0]));
       const required = Object.keys(definition.inputs).filter(port => !definition.optionalInputs?.includes(port));

@@ -39,7 +39,7 @@ class PreparedTtsNode {
     this.node = node; this.type = type; this.settings = settings; this.onState = onState; this.prepare = prepare;
     this.inputs = node.inputs; this.outputs = node.outputs;
   }
-  failure(error) { this.failed = true; this.onState(`Audio unavailable: ${error.message || error}`, 'error'); return this.node.dispose(); }
+  failure(error) { this.failed = true; this.error = error; this.onState(`Audio unavailable: ${error.message || error}`, 'error'); return this.node.dispose(); }
   async start(context) {
     this.context = context;
     try {
@@ -137,7 +137,9 @@ export function buildGraph(graph, options) {
     () => pipeline.state === 'stopping' || tabSources.every(spec => nodes[spec.id].endRequested));
   for (const spec of description.nodes) {
     let node;
-    switch (spec.type) {
+    const hostFactory = options.hostNodes?.[spec.type];
+    if (hostFactory) node = hostFactory(spec);
+    else switch (spec.type) {
       case 'Button': node = new ButtonNode(); break;
       case 'Hold': node = new HoldNode({ onState: state => options.onHoldState?.(state, spec.id) }); break;
       case 'Text': node = new TextNode(spec.settings); break;
@@ -165,7 +167,7 @@ export function buildGraph(graph, options) {
       case 'TextAccumulator': node = new TextAccumulatorNode(); break;
       case 'TextSlidingWindow': node = new TextSlidingWindowNode(); break;
       case 'TextWindow': node = new TextWindowNode(); break;
-      case 'TextFormatter': node = new TextFormatterNode(spec.settings); break;
+      case 'TextFormatter': node = new TextFormatterNode(spec.settings, options.formatterOptions); break;
       case 'KeyedTextCoalesce': node = new KeyedTextCoalesceNode(); break;
       case 'Plamo3Translate2B':
         node = new TranslationSchedulerNode({ prepare: options.preparePlamo || verifiedPlamoCache,
@@ -182,7 +184,7 @@ export function buildGraph(graph, options) {
           loadOptions: { cacheOnly: true }, onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`, spec.id, event) });
         node = new PreparedTtsNode(production, spec.type, spec.settings, (state, severity) => options.onTtsState?.(`${spec.id}: ${state}`, spec.id, { severity, message: state }), options.prepareTts || verifiedTtsCache); break;
       }
-      case 'AudioOutput': node = new AudioOutputNode(options.onSynthesizedAudio); break;
+      case 'AudioOutput': node = new AudioOutputNode((audio, signal) => options.onSynthesizedAudio?.(audio, signal, spec.id)); break;
       case 'Qwen3TtsStreaming': node = new Qwen3TtsNode({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
         onEvent: event => options.onTtsState?.(`${spec.id}: ${event.message || event.type}`, spec.id, event) }); break;
       case 'CosyVoice3Streaming': node = new CosyVoice3Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,
@@ -207,16 +209,16 @@ export function buildGraph(graph, options) {
       try {
         entry.controller.signal.throwIfAborted();
         const bounded = work => pipeline.wait(entry, Promise.race([work, new Promise((_, reject) => {
-          timeout = setTimeout(() => reject(Error('Model initialization timed out. Check browser support and free RAM/GPU memory, then Retry models.')), options.modelLoadTimeoutMs ?? 180000);
+          timeout = setTimeout(() => reject(Error('Model initialization timed out. Check runtime support and free RAM/GPU memory, then Retry models.')), options.modelLoadTimeoutMs ?? 180000);
         })]));
         if (resources.speechNodes.has(spec.id)) {
           await bounded(node.load());
-          if (node.unavailable || node.core?.state !== 'ready') throw Error('ASR model did not become ready. Check model assets, browser support and available memory.');
+          if (node.unavailable || node.core?.state !== 'ready') throw Error(node.error || 'ASR model did not become ready. Check model assets, runtime support and available memory.');
         } else {
           // These hooks only initialize owned inference resources. Keep their
           // exact context/signal for Start, and never call the hook twice.
           await bounded(Promise.resolve(node.start(entry.context)).then(() => node.ready));
-          if (node.failed || node.disposed || node.error || entry.failed) throw Error(node.error?.message || node.error || 'Model initialization failed.');
+          if (node.failed || node.disposed || node.error || entry.failed) throw Error(node.error?.message || node.error || entry.controller.signal.reason?.message || 'Model initialization failed.');
           node.start = context => {
             context.signal.throwIfAborted();
             if (context !== entry.context) throw Error('Prepared model belongs to another runtime.');

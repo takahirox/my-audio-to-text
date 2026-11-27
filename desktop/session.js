@@ -12,16 +12,16 @@ export class DesktopSession {
 
   async start(plan) {
     if (this.current) return;
-    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map(), floatingText: '' };
+    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map(), floatingText: '', status: new Map() };
     this.current = session;
-    this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays });
+    this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays, actions: plan.actions, id: session.id });
     try {
       if (plan.focused) await this.target.request('authorize', session.id);
       if (this.current !== session || this.state.phase !== 'preparing') return;
       session.admitted = true;
       await this.run('start', session.id, plan.graph);
       if (this.current === session && this.state.phase === 'preparing') {
-        this.update({ phase: 'running', microphone: plan.microphone });
+        this.update({ phase: 'running' });
       }
     } catch (error) { await this.cancel(error.message, session.id); }
   }
@@ -54,7 +54,7 @@ export class DesktopSession {
     for (const { node, port, committed, provisional } of session.displays.values()) {
       if (provisional) this.onDisplay({ node, port, item: committed });
     }
-    this.update({ phase: 'canceling', microphone: false, error });
+    this.update({ phase: 'canceling', error });
     return session.canceling = (async () => {
       // Release authorization before waiting for renderer cleanup. A response
       // from an already dispatched OS mutation is never retried.
@@ -76,7 +76,7 @@ export class DesktopSession {
     await this.release(session).catch(failure => { error ||= failure.message; });
     if (this.current !== session || this.state.phase !== phase) return;
     this.current = null;
-    this.update({ phase: 'idle', error, microphone: false });
+    this.update({ phase: 'idle', error, microphone: false, actions: [], id: null });
   }
 
   insert(id, text) {
@@ -94,9 +94,11 @@ export class DesktopSession {
     return pending;
   }
 
-  captureEnded(id) {
-    if (this.current?.id !== id) return;
-    this.update({ microphone: false });
+  captureState(id, microphone, error) {
+    const session = this.current;
+    if (!session || session.id !== id || !session.plan.microphone) return;
+    const patch = { microphone, ...(session.admitted && error && { error }) };
+    if (microphone !== this.state.microphone || patch.error) this.update(patch);
   }
 
   display(id, node, port, item, provisional) {

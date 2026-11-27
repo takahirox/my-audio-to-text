@@ -1,10 +1,12 @@
+import { packagedGraphHost } from './optional-model-assets.js';
 import { serveTranslationWorker } from './translation-worker.js';
 import { plamoCompletion, PLAMO_CONTEXT_TOKENS } from './plamo-policy.js';
 
 serveTranslationWorker(async (progress, { cacheOnly = false } = {}) => {
   if (!globalThis.isSecureContext || !globalThis.caches) throw Error('PLaMo requires desktop Chromium on HTTPS or localhost with browser storage.');
   if (typeof WebAssembly.Suspending !== 'function') throw Error('PLaMo requires a current desktop Chromium with WebAssembly JSPI support. Update Chrome before downloading.');
-  const { plamoModelBlob } = await import(globalThis.location.protocol === 'chrome-extension:'
+  if (packagedGraphHost() && !cacheOnly) throw Error('Prepare PLaMo in Models before starting.');
+  const { plamoModelBlob } = await import(packagedGraphHost()
     ? '../extension/plamo-cache.js' : './vendor/model-cache/plamo-cache.js');
   const blob = await plamoModelBlob({ cacheOnly, progress: view => progress({
     status: 'progress', file: 'PLaMo 3 Translate 2B', progress: 100 * view.downloadedBytes / view.totalBytes,

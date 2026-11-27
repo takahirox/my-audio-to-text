@@ -3,12 +3,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { defaultDesktopGraph, planGraph } from '../desktop/graph.js';
+import { defaultDesktopGraph, desktopNodeTypes, planGraph } from '../desktop/graph.js';
 import { DesktopLibrary } from '../desktop/library.js';
 import { DesktopSession } from '../desktop/session.js';
 import { FocusedApplicationTextOutputNode } from '../desktop/focused-output.js';
 import { FloatingDisplayNode } from '../web/floating-display-node.js';
-import { edge, graphNode, GRAPH_VERSION } from '../extension/graph.js';
+import { edge, graphNode, GRAPH_VERSION, NODE_TYPES } from '../extension/graph.js';
+import { exportEntry } from '../extension/graph-library.js';
+import { extractSubgraph } from '../extension/subgraphs.js';
+import { fetchPinnedModelAsset } from '../desktop/model-transport.js';
 import { Pipeline } from '../web/pipeline.js';
 import { TEXT } from '../web/port-contracts.js';
 import { TextFormatterNode } from '../web/text-nodes.js';
@@ -27,7 +30,7 @@ test('desktop JSON rejects browser-only endpoints and preserves saved revisions 
   const savedWithoutDisplay = library.add('Insertion only', insertionOnly);
   const graph = defaultDesktopGraph();
   graph.nodes.push(graphNode('ChromeTabAudio', 'tab'));
-  assert.throws(() => library.add('Unsupported', graph), /Unsupported desktop Node: ChromeTabAudio/);
+  assert.throws(() => library.add('Unsupported', graph), /ChromeTabAudio, tab\) requires the Chrome extension/);
   const entry = library.add('Second', defaultDesktopGraph());
   library.select(entry.id);
   const snapshot = planGraph(entry.graph, 'dictation');
@@ -233,4 +236,81 @@ test('authorization and microphone denial fail visibly, then a new Start succeed
   await controller.cancel();
   assert.equal(releases, 3);
   assert.equal(cancels, 2);
+});
+
+test('desktop palette follows the built-in catalog and Live accepts audio and action destinations', () => {
+  assert.deepEqual(Object.keys(desktopNodeTypes), Object.keys(NODE_TYPES).filter(type => type !== 'ChromeTabAudio'));
+  for (const [type, sink, port] of [['Kokoro', 'AudioOutput', 'audio'], ['Qwen3TtsStreaming', 'SpeakerOutput', 'stream']]) {
+    const graph = { version: GRAPH_VERSION, nodes: [
+      graphNode('Button', 'action'), graphNode('Text', 'text'), graphNode('Hold', 'hold'),
+      graphNode(type, 'speech'), graphNode(sink, 'output'),
+    ], edges: [
+      edge('action', 'trigger', 'hold', 'trigger'), edge('text', 'value', 'hold', 'input'),
+      edge('hold', 'value', 'speech', 'text'), edge('speech', port, 'output', 'audio'),
+    ] };
+    assert.equal(planGraph(graph, 'live').graph.nodes.length, graph.nodes.length);
+    assert.deepEqual(planGraph(graph, 'live').actions.map(action => action.id), ['action']);
+    assert.throws(() => planGraph({ ...graph, edges: [...graph.edges.slice(0, -1), edge('text', 'value', 'output', 'audio')] }, 'live'),
+      /cannot connect|incompatible/i);
+  }
+});
+
+test('desktop saves atomic extraction and imports shared Subgraph bundles with isolated snapshots', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'desktop-bundle-'));
+  t.after(() => rmSync(dir, { recursive: true }));
+  const library = new DesktopLibrary(join(dir, 'library.json'));
+  const graph = { version: GRAPH_VERSION, nodes: [
+    graphNode('Text', 'text'), graphNode('TextFormatter', 'format'),
+    graphNode('TextAccumulator', 'history'), graphNode('Display', 'view'),
+  ], edges: [
+    edge('text', 'value', 'format', 'input1'), edge('format', 'text', 'history', 'append'),
+    edge('history', 'text', 'view', 'input1'),
+  ] };
+  const parent = library.add('Parent', graph);
+  const { shared, parent: replacement } = extractSubgraph(graph, ['format', 'history'], 'shared');
+  library.extract(parent.id, parent.revision, { id: 'shared', name: 'Shared', graph: shared, replacementGraph: replacement });
+  const definition = library.lookup('shared');
+  const saved = library.lookup(parent.id);
+  const firstRun = planGraph(saved.graph, 'live', library.value.graphs);
+  const bundle = JSON.parse(exportEntry(saved, library.value));
+  const imported = library.import('Imported', bundle);
+  const secondRun = planGraph(imported.graph, 'live', library.value.graphs);
+  assert.notEqual(imported.graph.nodes.find(node => node.type === 'Subgraph').subgraphId, definition.id);
+  assert.deepEqual(firstRun.graph, secondRun.graph);
+  assert.throws(() => library.save(definition.id, definition.revision, { ...shared, edges: [] }), /Cannot disable executable paths/);
+  const changed = structuredClone(shared);
+  changed.nodes.find(node => node.id === 'format').settings.template = 'Reformatted {1}';
+  library.save(definition.id, definition.revision, changed);
+  assert.notDeepEqual(planGraph(saved.graph, 'live', library.value.graphs).graph, firstRun.graph);
+  assert.deepEqual(planGraph(imported.graph, 'live', library.value.graphs).graph, firstRun.graph);
+  bundle.graphs.find(entry => entry.id === bundle.root).graph.nodes.push(graphNode('ChromeTabAudio', 'tab'));
+  const before = library.value;
+  assert.throws(() => library.import('Incompatible', bundle), /requires the Chrome extension/);
+  assert.equal(library.value, before);
+});
+
+test('desktop model transport only fetches pinned sources and permits signed delivery redirects', async () => {
+  const pinned = 'https://huggingface.co/test/model/resolve/pinned/file.onnx';
+  const route = value => `local-voice://desktop/model-asset?source=${encodeURIComponent(value)}`;
+  const sources = new Map([[pinned, 3]]);
+  const controller = new AbortController(), seen = [];
+  let redirect = 'https://cas-bridge.xethub.hf.co/pin?signature=temporary';
+  const fetchAsset = async (url, options) => {
+    seen.push(url.href);
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.redirect, 'manual');
+    return url.href === pinned ? new Response(null, { status: 302, headers: { Location: redirect } }) : new Response('pin');
+  };
+  const request = (url, options) => fetchPinnedModelAsset(new Request(url, options), sources, controller.signal, fetchAsset);
+  assert.equal((await request(route(pinned) + '&other=1')).status, 404);
+  assert.equal((await request(route(pinned.replace('/pinned/', '/main/')))).status, 404);
+  assert.equal((await request(route(pinned), { method: 'POST' })).status, 404);
+  assert.deepEqual(seen, []);
+  const response = await request(route(pinned));
+  assert.equal(response.headers.get('Content-Length'), '3');
+  assert.equal(await response.text(), 'pin');
+  assert.deepEqual(seen, [pinned, redirect]);
+  redirect = 'https://huggingface.co.untrusted.test/file';
+  assert.equal((await request(route(pinned))).status, 502);
+  assert.deepEqual(seen, [pinned, 'https://cas-bridge.xethub.hf.co/pin?signature=temporary', pinned]);
 });

@@ -28,11 +28,14 @@ Speech-to-text is the most-developed processing capability today. The Chrome ext
 
 ## Desktop
 
-The standalone [desktop app](docs/desktop.md) runs saved graphs independently
-of the Chrome extension and Web Playground. Dictation is verified in
-Mousepad on Debian X11. The Apple Silicon macOS package implements focused
-output for TextEdit and supported Safari web fields. Cross-application
-insertion on macOS remains unverified because the runner lacks OS permissions.
+The standalone [desktop app](docs/desktop.md) runs saved graphs locally on
+Apple Silicon macOS and Linux X11. Its Graph Editor and Live runtime support
+28 shared Nodes, including local CPU/WASM and WebGPU models, Graph Actions,
+audio playback, and reusable Subgraph bundles. Chrome tab audio requires the
+extension. Each app keeps its own graph library and verified model cache.
+See the [desktop guide](docs/desktop.md#graphs-and-models) for model
+requirements, portable graphs, and translation, text processing, and speech
+synthesis examples.
 
 ## Node Playground
 

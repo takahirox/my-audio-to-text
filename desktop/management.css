@@ -15,3 +15,8 @@ main > section:not(#editor) { max-width: 52rem; margin: 1.3rem auto; }
 #displays [aria-selected="true"] { border-color: var(--accent); color: var(--accent); font-weight: 650; }
 #displays [role="tabpanel"] { margin-block: .8rem .2rem; min-height: 2rem; }
 kbd { padding: .2rem .4rem; border: 1px solid var(--border); border-radius: .35rem; background: var(--panel); }
+#model-picker { max-width: 100%; }
+#model-license { max-height: 22rem; overflow: auto; white-space: pre-wrap; }
+#editor-models, #live-models, #live-actions { margin-block: .75rem; }
+#node-status [data-severity="error"] { color: var(--danger); }
+#audio-outputs audio { max-width: 100%; }

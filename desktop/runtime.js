@@ -1,51 +1,55 @@
 import { Microphone } from '../web/audio.js';
 import { BrowserTabAudioNode } from '../web/transcription-nodes.js';
-import { Pipeline } from '../web/pipeline.js';
-import { SpeechToTextMoonshineSmallJaNode } from '../web/moonshine-small-ja-node.js';
-import { TextFormatterNode } from '../web/text-nodes.js';
-import { TextNode } from '../web/text-constant-node.js';
 import { displayInputs } from '../web/display-node.js';
-import { FloatingDisplayNode } from '../web/floating-display-node.js';
 import { snapshotItem } from '../web/paired-text.js';
-import { ModelAssetCache } from '../extension/model-asset-cache.js';
-import { moonshineJapaneseManifest } from '../extension/optional-asr-cache.js';
-import { FOCUSED_OUTPUT, JAPANESE_ASR, MICROPHONE } from './graph.js';
+import { executableGraph } from '../extension/graph.js';
+import { buildGraph } from '../extension/graph-runtime.js';
+import { graphActions, pressGraphButton } from '../extension/graph-actions.js';
+import { prepareGraphModelAssets } from '../extension/graph-model-preparation.js';
+import { FOCUSED_OUTPUT, MICROPHONE } from './graph.js';
+import { desktopAssetCache, desktopModels } from './models.js';
 import { FocusedApplicationTextOutputNode } from './focused-output.js';
 
 const host = window.runtimeHost;
-let current, cachePromise, download;
+const cachePromises = new Map();
+let current, download;
 
-function modelCache() {
-  return cachePromise ??= moonshineJapaneseManifest().then(manifest => new ModelAssetCache(manifest, {
-    // Downloads are explicit. The desktop's durable Chromium profile owns them.
-    beforeDownload: () => {},
-  })).catch(error => { cachePromise = null; throw error; });
+function modelCache(key) {
+  const model = desktopModels.find(model => model.key === key);
+  if (!model) throw Error('Unknown desktop model.');
+  if (!cachePromises.has(key)) cachePromises.set(key, model.manifest().then(desktopAssetCache)
+    .catch(error => { cachePromises.delete(key); throw error; }));
+  return cachePromises.get(key);
 }
 
 class DesktopMicrophoneNode extends BrowserTabAudioNode {
-  constructor(fail, onStopped) {
+  constructor(fail, onCaptureChange) {
     super({
       onEnded: () => fail('The system microphone disconnected. Check the default input and start again.'),
-      sourceFactory: (onAudio, ended) => new Microphone(onAudio, ended),
+      sourceFactory: (onAudio, ended) => new Microphone(onAudio, ended, onCaptureChange),
     });
-    this.onStopped = onStopped;
   }
 
   async start(context) {
+    if (this.disposed) return;
     try { await super.start(context); }
     catch (error) {
+      if (this.disposed) return;
       throw Error(`Microphone unavailable: ${error.message}. Check the system microphone permission and default input, then retry.`);
     }
   }
 
-  async stop() {
-    await super.stop();
-    this.onStopped();
+  stop() {
+    if (this.disposed) return this.releasing;
+    return super.stop();
+  }
+
+  async dispose() {
+    return this.releasing ??= super.dispose();
   }
 }
 
-// The shared Display contracts and snapshot semantics are used in the hidden
-// runtime. The Live window owns the view and never gains capture permissions.
+// The runtime owns delivery and snapshots. Live renders the shared ITEM view.
 class DesktopDisplayNode {
   outputs = {};
   constructor(settings, show) { this.inputs = displayInputs(settings.inputCount); this.show = show; }
@@ -60,88 +64,163 @@ class DesktopDisplayNode {
 
 async function start(id, graph) {
   if (current) throw Error('A desktop graph is already running.');
-  const session = { id, active: true };
-  current = session;
-  const fail = message => {
-    if (session.active) host.failure(id, message);
+  const controller = new AbortController(), { signal } = controller;
+  const owner = { id, controller };
+  current = owner;
+  const captures = new Set();
+  const onCaptureChange = (node, capturing) => {
+    const wasCapturing = captures.size > 0;
+    if (capturing) captures.add(node);
+    else captures.delete(node);
+    const isCapturing = captures.size > 0;
+    if (current === owner && wasCapturing !== isCapturing) host.captureState(id, isCapturing);
   };
-  const recognizers = [];
-  const create = ({ type, id: node, settings }) => {
-    switch (type) {
-      case MICROPHONE:
-        return new DesktopMicrophoneNode(fail, () => host.captureEnded(id));
-      case JAPANESE_ASR: {
-        const recognizer = new SpeechToTextMoonshineSmallJaNode({
-          workerFactory: () => new Worker(new URL('./moonshine-worker.js', import.meta.url), { type: 'module' }),
-          onEvent: event => { if (event.type === 'error') fail(event.message); },
-        });
-        recognizers.push(recognizer);
-        return recognizer;
-      }
-      case 'Text': return new TextNode(settings);
-      case 'TextFormatter': return new TextFormatterNode(settings, { separatePreviews: true });
-      case 'Display': return new DesktopDisplayNode(settings, (port, item, provisional) => {
-        if (session.active) host.display(id, node, port, item, provisional);
-      });
-      case 'FloatingDisplay': return new FloatingDisplayNode(text => host.floatingDisplay(id, text));
-      case FOCUSED_OUTPUT: return new FocusedApplicationTextOutputNode(text => host.insert(id, text));
-      default: throw Error(`Unsupported desktop Node: ${type}.`);
-    }
+  const active = () => current === owner && !signal.aborted;
+  const fail = message => { if (active()) host.failure(id, message); };
+  const status = (node, message, severity, needsActivation) => {
+    if (active()) host.status(id, node, message, severity, needsActivation);
+  };
+  const onEvent = (event, node) => {
+    if (event.message) status(node, event.message, event.severity || (event.type === 'error' ? 'error' : undefined));
   };
   try {
-    session.pipeline = new Pipeline({ nodes: Object.fromEntries(graph.nodes.map(node => [node.id, create(node)])),
-      connections: graph.edges, onError: error => fail(error.message) });
-    // Verify weights and load every recognizer before requesting microphone
-    // access or allowing another complete path to emit at startup.
-    await Promise.all(recognizers.map(recognizer => recognizer.load()));
-    if (!session.active) return;
-    if (recognizers.some(recognizer => recognizer.unavailable)) throw Error('Model unavailable. Prepare it in Models and retry.');
-    await session.pipeline.start();
+    const runtime = buildGraph(graph, {
+      preload: true,
+      formatterOptions: { separatePreviews: true },
+      hostNodes: {
+        [MICROPHONE]: ({ id: node }) => new DesktopMicrophoneNode(fail, capturing => onCaptureChange(node, capturing)),
+        [FOCUSED_OUTPUT]: () => new FocusedApplicationTextOutputNode(text => host.insert(id, text)),
+        Display: ({ id: node, settings }) => new DesktopDisplayNode(settings, (port, item, provisional) => {
+          if (active()) host.display(id, node, port, item, provisional);
+        }),
+      },
+      onError(error, node) {
+        if (runtime.audioSources.has(node) || graph.nodes.some(spec => spec.id === node && spec.type === FOCUSED_OUTPUT)) fail(error.message);
+        else {
+          status(node, error.message, 'error');
+          if (runtime.speechNodes.has(node)) reconcileCapture(error.message);
+          owner.publishActions?.();
+        }
+      },
+      onSpeechEvent(event, node) {
+        onEvent(event, node);
+        if (event.branchUnavailable) reconcileCapture(event.message);
+      },
+      onTextProcessingEvent: onEvent,
+      onIfConditionEvent: onEvent,
+      onTtsState: (message, node, event) => onEvent({ ...event, message }, node),
+      onTranslationState: (message, node, severity) => status(node, message, severity),
+      onHoldState: (state, node) => status(node, state),
+      onSpeakerState: (state, node) => status(node, state.message, state.severity, state.needsActivation),
+      onFloatingDisplay: text => { if (active()) host.floatingDisplay(id, text); },
+      onSynthesizedAudio: (audio, audioSignal, node) => { if (active() && !audioSignal.aborted) host.audio(id, node, audio); },
+      onModelProgress: (node, index, total) => status(node, `Loading local model ${index} of ${total}…`),
+    });
+    function reconcileCapture(message) {
+      const { audioSources, description, pipeline, speechNodes } = runtime;
+      if (!active() || !['starting', 'running', 'stopping'].includes(pipeline.state)) return;
+      const unavailable = new Set([...pipeline.entries.values()]
+        .filter(entry => entry.failed || speechNodes.get(entry.id)?.unavailable).map(entry => entry.id));
+      const remaining = executableGraph(description, { unavailable });
+      if (!remaining.nodes.length) {
+        fail(message);
+        return;
+      }
+      const usable = new Set(remaining.nodes.map(node => node.id));
+      const unused = [...audioSources].filter(([node]) => !usable.has(node));
+      if (!unused.length) return;
+      // Release sources without flushing into failed paths. Other branches keep their live state.
+      void Promise.all(unused.map(([, source]) => source.dispose())).then(() => {
+        if (active() && unused.length === audioSources.size) host.captureState(id, captures.size > 0, message);
+      }, error => fail(error.message));
+    }
+    Object.assign(owner, runtime);
+    const publishPreparation = throttledProgress((model, view) => host.preparation(id, model.key, model.title, view));
+    await prepareGraphModelAssets(runtime.description, {
+      signal, createCache: desktopAssetCache, onChange: publishPreparation,
+    });
+    await runtime.prepareModels();
+    signal.throwIfAborted();
+    if (runtime.audioSources.size) await host.microphone(id);
+    signal.throwIfAborted();
+    await runtime.pipeline.start();
+    signal.throwIfAborted();
+    if (runtime.pipeline.state !== 'running') throw Error('The graph could not start. Check Live for node errors and retry.');
+    owner.publishActions = () => host.actions(id, graphActions(owner.description, owner, true));
+    owner.publishActions();
   } catch (error) {
-    await close(session);
+    await close(owner);
     throw error;
   }
 }
 
-async function close(session) {
-  session.active = false;
-  // Dispose the full graph, including workers that started loading before
-  // their Pipeline start hooks ran.
-  try { await session.pipeline?.dispose(); }
-  finally { if (current === session) current = null; }
+async function close(owner) {
+  owner.controller.abort();
+  try { await owner.pipeline?.dispose(); }
+  finally { if (current === owner) current = null; }
+}
+
+function modelProgress({ state, error, downloadedBytes, totalBytes, cachedBytes }) {
+  return { state, error, downloadedBytes, totalBytes, cachedBytes };
+}
+
+function throttledProgress(publish) {
+  let previous, time = 0;
+  return (model, view) => {
+    const marker = `${model.key}:${view.state}`;
+    if (view.state === 'Downloading' && marker === previous && performance.now() - time < 100) return;
+    previous = marker;
+    time = performance.now();
+    publish(model, modelProgress(view));
+  };
 }
 
 const commands = {
   start,
   async stop(id) {
-    const session = current;
-    if (session?.id !== id) return;
-    try { await session.pipeline.stop(); }
-    finally { await close(session); }
+    const owner = current;
+    if (owner?.id !== id) return;
+    try { await owner.pipeline.stop(); }
+    finally { await close(owner); }
   },
   async cancel(id) {
-    const session = current;
-    if (session?.id !== id) return;
-    session.active = false;
-    try { await session.pipeline?.cancel(); }
-    finally { await close(session); }
+    const owner = current;
+    if (owner?.id !== id) return;
+    owner.controller.abort();
+    try { await owner.pipeline?.cancel(); }
+    finally { await close(owner); }
   },
-  async modelStatus() { return (await modelCache()).inspect(); },
-  async modelPrepare() {
+  enableSpeakers(id) {
+    if (current?.id !== id) return;
+    for (const spec of current.description.nodes) {
+      if (spec.type === 'SpeakerOutput') current.pipeline.entries.get(spec.id).node.enable();
+    }
+  },
+  press(id, node) {
+    const owner = current;
+    if (owner?.id !== id) return false;
+    return pressGraphButton(owner, node, {
+      running: true, owns: () => current === owner, onChange: owner.publishActions,
+    });
+  },
+  async modelStatus(key) { return modelProgress(await (await modelCache(key)).inspect()); },
+  async modelPrepare(key) {
     if (download) throw Error('Model preparation is already running.');
     const controller = new AbortController();
     download = controller;
     const status = view => controller.signal.aborted && view.state !== 'Ready'
-      ? { ...view, state: 'Canceled', error: 'Model preparation canceled. Retry to finish downloading.' } : view;
+      ? { ...modelProgress(view), state: 'Canceled', error: 'Model preparation canceled. Retry to finish downloading.' } : modelProgress(view);
     try {
-      const result = await (await modelCache()).prepare({ signal: controller.signal, onChange: view => host.modelProgress(status(view)) });
+      const cache = await modelCache(key);
+      const progress = throttledProgress((_model, view) => host.modelProgress(key, view));
+      const result = await cache.prepare({ signal: controller.signal, onChange: view => progress({ key }, status(view)) });
       return status(result);
     } finally { download = null; }
   },
   modelCancel() { download?.abort(); },
-  async modelDelete() {
+  async modelDelete(key) {
     if (current || download) throw Error('Stop the running session or download before deleting the model.');
-    return (await modelCache()).remove();
+    return modelProgress(await (await modelCache(key)).remove());
   },
 };
 

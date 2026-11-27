@@ -163,7 +163,7 @@ test('pair snapshots remain independent across same-ID changes; new accumulator 
     assert.deepEqual(NODE_TYPES[type].inputs, instance.inputs); assert.deepEqual(NODE_TYPES[type].outputs, instance.outputs);
     assert.deepEqual(graphNode(type, type).settings, type === 'Display' ? { inputCount: 1, title: '' } : {});
   }
-  const bundle = readFileSync(new URL('../scripts/build-extension.py', import.meta.url), 'utf8');
+  const bundle = readFileSync(new URL('../scripts/graph_assets.py', import.meta.url), 'utf8');
   for (const name of ['paired-text.js', 'keyed-paired-text-accumulator-node.js', 'display-node.js']) assert.ok(bundle.includes(`"${name}"`));
 });
 

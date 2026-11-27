@@ -1,3 +1,4 @@
+import { packagedGraphHost } from '../web/optional-model-assets.js';
 import { textProcessingModel } from '../web/text-summary-models.js';
 import { defineAssetSet, ModelAssetCache, MODEL_CACHE_NAME } from './model-asset-cache.js';
 
@@ -8,7 +9,7 @@ export async function textSummaryManifest(type) {
   return defineAssetSet({ ...model, files: await response.json() });
 }
 export async function cacheOnlyTextSummaryRuntime(env, type) {
-  if (globalThis.location?.protocol !== 'chrome-extension:') throw new Error('Text processing requires an extension-owned Worker.');
+  if (!packagedGraphHost()) throw new Error('Text processing requires a packaged graph Worker.');
   const manifest = await textSummaryManifest(type);
   const view = await new ModelAssetCache(manifest).inspect({ retain: true });
   if (view.state !== 'Ready') throw new Error(view.error || 'Text processing model assets missing or evicted. Use Retry models in Live, or retry preparation in Models.');
