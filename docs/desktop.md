@@ -61,10 +61,11 @@ its GTK/XEmbed fallback. [Electron Linux tray behavior](https://www.electronjs.o
 3. Press **Control+Option+Command+D** on macOS or **Ctrl+Alt+Shift+D** on X11.
    The indicator shows **Preparing** while the graph loads and **Recording**
    once microphone capture starts.
-4. Speak Japanese. Committed text goes to the field focused when each chunk
-   is delivered. Switch fields, windows, or apps while recording. Press the
-   same shortcut or **Stop** on the indicator to finish and drain accepted
-   output. **Cancel voice typing** in the tray discards work still pending.
+4. Speak Japanese. With the default graph, each final result goes to the field
+   focused when it is delivered. Switch fields, windows, or apps while
+   recording. Press the same shortcut or **Stop** on the indicator to finish
+   and drain accepted output. **Cancel voice typing** in the tray discards work
+   still pending.
 
 The tray provides Start and Stop, the current shortcut graph, Graph Library,
 Models, Settings, and Quit. Closing the management window leaves the tray and
@@ -79,23 +80,21 @@ enable assistive technology in the session and reopen the target application.
 
 ### Focused fields
 
-Each nonempty committed TEXT chunk follows the current focus. A chunk can go
-to the new field even if you began speaking before switching focus. Recording
-continues through focus changes. Stop drains accepted chunks using the same
-rule. Cancel or Quit discards pending chunks and finishes any clipboard
-cleanup for a Paste already sent.
+Each nonempty TEXT chunk delivered to the focused output follows the current
+focus. A chunk can go to the new field even if you began speaking before
+switching focus. Recording continues through focus changes. Stop drains
+accepted chunks using the same rule. Cancel or Quit discards pending chunks
+and finishes any clipboard cleanup for a Paste already sent.
 
 On macOS, the helper waits for the shortcut and modifiers to be released,
 stages the text on the system clipboard, and checks the current focus just
-before sending Command+V. Repeated commits are pasted separately.
-Provisional hypotheses stay out of the focused field. The helper stages
-Unicode, whitespace, line breaks, and tabs as plain text. The current app
-handles Paste normally, including selection replacement, formatting,
-truncation, or rejection. Fields with incomplete Accessibility editing
-metadata can receive Paste. Secure Keyboard Entry, a missing foreground
-app, an identified menu, or a field identified as protected, disabled, or
-read-only causes the helper to skip the chunk. Skipped chunks are discarded
-and delivery resumes with the next committed chunk in a usable field.
+before sending Command+V. The helper stages Unicode, whitespace, line breaks,
+and tabs as plain text. The current app handles Paste normally, including
+selection replacement, formatting, truncation, or rejection. Fields with
+incomplete Accessibility editing metadata can receive Paste. Secure Keyboard
+Entry, a missing foreground app, an identified menu, or a field identified as
+protected, disabled, or read-only causes the helper to skip the chunk. Skipped
+chunks are discarded and delivery resumes with the next chunk in a usable field.
 
 The helper gives each Paste 250 ms to read the clipboard before attempting
 to restore the previous clipboard and starting the next chunk. It preserves
@@ -175,9 +174,12 @@ The default graph is
 `MicrophoneAudio → SpeechToTextMoonshineSmallJa.final → FocusedInputTextOutputNode`.
 The editor labels this sink **Focused application text output**. The saved
 graph retains the same node type and port schema used by the browser host.
-The sink accepts committed TEXT from any supported producer, including
-**Text** and **Text formatter**. Other supported nodes are **Microphone audio**,
-**Speech Recognition · JA / Streaming**, and **Display**.
+The default graph connects only the recognizer's `final` output to the sink.
+To insert streaming hypotheses, connect `provisional` instead. The sink accepts
+TEXT from any supported producer, including **Text** and **Text formatter**.
+Each nonempty delivery is a separate insertion, including repeated values.
+Empty strings leave the field as it is. Other supported nodes are
+**Microphone audio**, **Speech Recognition · JA / Streaming**, and **Display**.
 
 Use **Graph Library** to create, duplicate, edit, select, and import or export
 individual graphs. The editor uses the same typed ports, settings, wiring
@@ -205,7 +207,7 @@ Apple's Carbon, Accessibility and AppKit frameworks. The Linux helper uses
 the distribution's AT-SPI and X11 bindings.
 
 The main process owns the tray, global shortcut, permission policy, saved
-graph snapshots, and session authorization for committed output. At delivery
+graph snapshots, and session authorization for focused output. At delivery
 the X11 helper matches the active window to its process and focused AT-SPI
 object, checks the caret, and uses the object's
 [EditableText insertion method](https://gnome.pages.gitlab.gnome.org/at-spi2-core/libatspi/method.EditableText.insert_text.html).
@@ -246,9 +248,9 @@ native shortcut conflicts, residency after closing the window, and shortcut
 release at Quit. The suite also relaunches the package to verify Auto Save
 draft recovery. A controlled AppKit editor uses its native pasteboard
 reader with a private pasteboard and simulated delayed consumption. The tests
-exercise ordered committed chunks during recording, multi-item clipboard
-preservation, intervening copies, held modifiers, protection, focus changes,
-Stop, and cancellation without external keyboard-event authorization.
+exercise ordered provisional and final chunks during recording, multi-item
+clipboard preservation, intervening copies, held modifiers, protection, focus
+changes, Stop, and cancellation without external keyboard-event authorization.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
 the app's microphone input. It temporarily selects BlackHole as the default
 input and restores the prior device.

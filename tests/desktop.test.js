@@ -37,25 +37,42 @@ test('desktop JSON rejects browser-only endpoints and preserves saved revisions 
   assert.deepEqual(snapshot.graph, defaultDesktopGraph());
 });
 
-test('focused output receives committed generic TEXT through a deterministic formatter in order', async () => {
+test('focused output inserts each nonempty generic TEXT delivery in order', async () => {
   let context;
   const output = [];
   const pipeline = new Pipeline({ nodes: {
-    producer: { outputs: { text: TEXT }, start(value) { context = value; },
-    },
-    formatter: new TextFormatterNode({ template: ' {1}\n', inputCount: 1 }, { separatePreviews: true }),
+    producer: { outputs: { text: TEXT }, start(value) { context = value; } },
     target: new FocusedApplicationTextOutputNode(text => { output.push(text); }),
-  }, connections: [edge('producer', 'text', 'formatter', 'input1'), edge('formatter', 'text', 'target', 'text')] });
+  }, connections: [edge('producer', 'text', 'target', 'text')] });
   await pipeline.start();
   context.emitOutputs({ text: 'partial' }, { provisional: true });
+  context.emitOutputs({ text: '東京🙂' }, { provisional: true });
   context.emit('text', '東京🙂');
-  context.emit('text', '東京🙂');
+  context.emitOutputs({ text: '' }, { provisional: true });
+  context.emit('text', 'next');
   await pipeline.stop();
   await pipeline.dispose();
-  assert.deepEqual(output, [' 東京🙂\n', ' 東京🙂\n']);
+  assert.deepEqual(output, ['partial', '東京🙂', '東京🙂', 'next']);
 });
 
-test('formatter previews stay out of focused output when independent producers commit', async () => {
+test('default desktop wiring inserts only the connected final output', async () => {
+  let speech;
+  const output = [];
+  const connections = plan().graph.edges.filter(({ to }) => to[0] === 'focused-output');
+  const pipeline = new Pipeline({ nodes: {
+    speech: { outputs: { provisional: TEXT, final: TEXT }, provisionalOutputs: ['provisional'],
+      start(context) { speech = context; } },
+    'focused-output': new FocusedApplicationTextOutputNode(text => { output.push(text); }),
+  }, connections });
+  await pipeline.start();
+  speech.emit('provisional', 'partial');
+  speech.emitOutputs({ provisional: 'another partial', final: 'final text' });
+  await pipeline.stop();
+  await pipeline.dispose();
+  assert.deepEqual(output, ['final text']);
+});
+
+test('focused output inserts every snapshot emitted by the formatter', async () => {
   let first, second;
   const output = [], live = [];
   const pipeline = new Pipeline({ nodes: {
@@ -76,8 +93,8 @@ test('formatter previews stay out of focused output when independent producers c
   second.emit('final', 'another final');
   await pipeline.stop();
   await pipeline.dispose();
-  assert.deepEqual(output, ['|confirmed text|', '|confirmed text|first final', '|another final|first final']);
-  assert.deepEqual(live, ['unfinished hypothesis||', ...output]);
+  assert.deepEqual(live, ['unfinished hypothesis||', '|confirmed text|', '|confirmed text|first final', '|another final|first final']);
+  assert.deepEqual(output, live);
 });
 
 test('focused output ignores cancellation deliveries even with a fresh cleanup signal', async () => {

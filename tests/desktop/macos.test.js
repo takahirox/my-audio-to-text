@@ -265,7 +265,7 @@ function dispatchFixture(t, tool) {
 test('macOS clipboard paste', async t => {
   const tool = await compileDispatchFixture(t);
 
-  await t.test('streams rapid committed TEXT through a delayed AppKit editor read', async t => {
+  await t.test('streams rapid provisional and final TEXT through a delayed AppKit editor read', async t => {
     const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
     await configure({ frontPid: 200, noRole: true, noField: true });
     const id = await start();
@@ -281,10 +281,10 @@ test('macOS clipboard paste', async t => {
     await pipeline.start();
     t.after(() => pipeline.dispose());
     const chunks = [' 東京🙂\n\t', ' 東京🙂\n\t', ' か\u3099 '];
-    source.emitOutputs({ text: 'unfinished hypothesis' }, { provisional: true });
+    source.emitOutputs({ text: chunks[0] }, { provisional: true });
     source.emit('text', '');
-    for (const chunk of chunks) source.emit('text', chunk);
-    source.emitOutputs({ text: 'another hypothesis' }, { provisional: true });
+    source.emit('text', chunks[1]);
+    source.emitOutputs({ text: chunks[2] }, { provisional: true });
 
     let prefix = 'left';
     for (const [index, chunk] of chunks.entries()) {
