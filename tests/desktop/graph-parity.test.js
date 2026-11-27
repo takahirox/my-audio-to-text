@@ -114,6 +114,32 @@ test('packaged desktop extracts a Subgraph and runs Button, Hold and structured 
   await phase(page, 'idle');
 });
 
+test('packaged desktop exports a Subgraph draft after Auto Save rejects it', { timeout: 30000 }, async t => {
+  const { app, page, dir } = await launch(t);
+  const definition = {
+    ...graph([spec('Hold', 'hold')], []),
+    interface: {
+      inputs: [{ id: 'in1', name: 'Text', node: 'hold', port: 'input' }],
+      outputs: [{ id: 'out1', name: 'Held text', node: 'hold', port: 'value' }],
+    },
+  };
+  const entry = await page.evaluate(graph => window.desktop.add('Hold text', graph, 'subgraph'), definition);
+  await page.getByRole('article', { name: entry.name, exact: true }).getByRole('button', { name: 'Edit' }).click();
+  await page.getByRole('textbox', { name: 'inputs in1 name' }).fill('');
+  await expect(page.locator('#graph-state')).toHaveText('Save failed');
+
+  const path = join(dir, 'draft.json');
+  await app.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+  }, path);
+  await page.getByLabel('Graph actions', { exact: true }).click();
+  await page.getByRole('button', { name: 'Export graph JSON', exact: true }).click();
+  const expected = structuredClone(entry.graph);
+  expected.interface.inputs[0].name = '';
+  await expect.poll(() => readFile(path, 'utf8').then(JSON.parse).catch(() => null)).toEqual(expected);
+  assert.deepEqual((await get(page)).library.graphs.find(candidate => candidate.id === entry.id), entry);
+});
+
 test('packaged desktop constructs each AI Node and loads each production Worker to its cache or capability boundary', {
   timeout: 45000,
 }, async t => {
@@ -290,6 +316,35 @@ test('packaged Kokoro Worker initializes Open JTalk from its prepared Japanese v
   });
   assert.match(phonemes, /^k.+[.!?]$/);
   await runtime.evaluate(() => window.kokoroWorker.terminate());
+});
+
+test('packaged Models inspect the selected cache after switching during a check', { timeout: 30000 }, async t => {
+  const { app, page, runtime } = await launch(t);
+  const key = 'kokoro:af_heart';
+  await prepareInferenceFixtures(app, runtime, [{
+    key, worker: 'kokoro', script: '', manifest: 'kokoro',
+    graph: modelGraph('Kokoro', { voice: 'af_heart' }),
+  }]);
+  await runtime.evaluate(() => {
+    const open = CacheStorage.prototype.open;
+    CacheStorage.prototype.open = function (name) {
+      return new Promise(resolve => {
+        window.releaseInspection = () => {
+          CacheStorage.prototype.open = open;
+          resolve(open.call(this, name));
+        };
+      });
+    };
+  });
+  const status = page.locator('#model-status');
+  await page.getByRole('button', { name: 'Models', exact: true }).click();
+  await runtime.waitForFunction(() => Boolean(window.releaseInspection));
+  await expect(status).toHaveText('Checking cache…');
+  await page.getByLabel('Model', { exact: true }).selectOption(key);
+  await expect(status).toHaveText('Unchecked');
+  await runtime.evaluate(() => window.releaseInspection());
+  await expect(status).toHaveText('Ready');
+  await expect(page.locator('#delete-model')).toBeEnabled();
 });
 
 test('packaged desktop runs prepared CPU and WebGPU models offline and saves real speech as WAV', {

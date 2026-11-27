@@ -3,8 +3,8 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { DesktopLibrary } from './library.js';
-import { assertDesktopGraph, planGraph } from './graph.js';
-import { exportEntry } from '../extension/graph-library.js';
+import { planGraph } from './graph.js';
+import { exportDraft } from '../extension/graph-library.js';
 import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 import { desktopModels } from './models.js';
@@ -334,13 +334,13 @@ function bindIPC() {
   ui('save', (id, revision, graph) => { const entry = library.save(id, revision, graph); publish(); return entry; });
   ui('export', async (graph, id) => {
     const entry = id === undefined ? { id: 'graph', name: 'Graph', description: '' } : library.lookup(id);
-    const valid = assertDesktopGraph(graph, library.value.graphs, entry.kind);
+    const json = exportDraft({ ...entry, description: entry.description ?? '' }, graph, library.value);
     const result = await dialog.showSaveDialog(management, {
       title: 'Export graph JSON', defaultPath: 'processing-graph.json',
       filters: [{ name: 'Graph JSON', extensions: ['json'] }],
     });
     if (!result.canceled && result.filePath) {
-      await writeFile(result.filePath, exportEntry({ ...entry, description: entry.description ?? '', graph: valid }, library.value), { mode: 0o600 });
+      await writeFile(result.filePath, json, { mode: 0o600 });
     }
   });
   ui('select', id => { library.select(id); publish(); });

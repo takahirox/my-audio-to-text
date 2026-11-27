@@ -185,11 +185,13 @@ const modelAction = run(async (action, key = modelPicker.value) => {
 });
 
 function modelUpdate({ key, value, operation, reset }) {
+  const finished = modelOperation && !operation;
   modelOperation = operation;
   if (reset) modelViews.clear();
   modelViews.set(key, value);
   renderModel();
   renderGraphModels();
+  if (finished && currentPage === 'models' && key !== modelPicker.value) void modelAction('modelStatus');
 }
 
 async function inspectModel() {
