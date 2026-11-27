@@ -1,5 +1,6 @@
-// Preserve extension cache-only policy; normal web Workers prepare on explicit Run.
-const assets = cache => import(globalThis.location.protocol === 'chrome-extension:'
+// Packaged Workers consume verified graph assets. The Playground prepares on Run.
+export const packagedGraphHost = () => ['chrome-extension:', 'local-voice:'].includes(globalThis.location?.protocol);
+const assets = cache => import(packagedGraphHost()
   ? `../extension/${cache}-cache.js` : './playground-model-assets.js');
 export async function moonshineJapaneseManifest(...args) { return (await assets('optional-asr')).moonshineJapaneseManifest(...args); }
 export async function moonshineManifest(...args) { return (await assets('optional-asr')).moonshineManifest(...args); }

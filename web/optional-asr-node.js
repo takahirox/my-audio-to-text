@@ -14,7 +14,7 @@ export class OptionalAsrNode {
     if (event.type === 'ready') this.loading?.resolve();
     else if (event.type === 'stopped') this.draining?.resolve();
     else if (event.type === 'error') {
-      this.unavailable = true; this.core?.release();
+      this.error = event.message; this.unavailable = true; this.core?.release();
       this.context?.emit('provisional', '');
       this.loading?.resolve(); this.draining?.resolve();
       this.onEvent({ ...event, branchUnavailable: true });

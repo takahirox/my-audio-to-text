@@ -269,7 +269,7 @@ test('packaged app uses the real tray, editor, shortcut and focused desktop cont
   await page.getByRole('button', { name: 'Graph Library' }).click();
   await page.locator('#import-file').setInputFiles({ name: 'unsupported.json', mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify({ version: GRAPH_VERSION, nodes: [graphNode('ChromeTabAudio', 'tab')], edges: [] })) });
-  await expect(page.locator('#errors')).toContainText('Unsupported desktop Node');
+  await expect(page.locator('#errors')).toContainText('requires the Chrome extension');
   await selectGraph(page, 'GTK fixture');
   const exportedPath = join(dir, 'processing-graph.json');
   await app.evaluate(({ dialog }, path) => {
@@ -545,8 +545,10 @@ test('authorized focused TEXT waits for the Stop shortcut grab and follows the c
 test('Models can retry cache inspection and preparation after the packaged runtime crashes', { timeout: 60000 }, async t => {
   const { app, page } = await launch(t);
   // Hold the model request open so the real download stays in progress without using the network.
-  await app.evaluate(({ session }) => {
-    session.defaultSession.webRequest.onBeforeRequest({ urls: ['https://download.moonshine.ai/*'] }, () => {});
+  await app.evaluate(() => {
+    globalThis.fetch = async (_url, { signal }) => new Promise((_, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
   });
   const runtime = await eventually(() => app.windows().find(win => win.url().endsWith('/runtime.html')),
     'Runtime renderer did not load');
@@ -600,10 +602,19 @@ test('pinned Japanese Moonshine captures PulseAudio and inserts a real offline f
   const model = () => page.locator('#model-status');
   const select = (name) => selectGraph(page, name);
   await select('Japanese voice typing');
+  await app.evaluate(() => {
+    globalThis.desktopTestFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, { signal }) => new Promise((_, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    });
+  });
   await trigger(native.id);
-  await eventually(async () => /not downloaded|missing|evicted/i.test((await view()).session.error),
-    'Starting without a prepared model did not fail before capture');
+  await eventually(async () => (await view()).preparation?.state === 'Downloading',
+    'Start did not prepare the selected model before capture');
   assert.equal((await view()).session.microphone, false);
+  await trigger(native.id);
+  await phase('idle');
+  await app.evaluate(() => { globalThis.fetch = globalThis.desktopTestFetch; });
 
   await show();
   await page.getByRole('button', { name: 'Models' }).click();
@@ -615,9 +626,8 @@ test('pinned Japanese Moonshine captures PulseAudio and inserts a real offline f
   await page.locator('#prepare').click();
   await expect(model()).toHaveText('Ready', { timeout: 700000 });
   const manifest = JSON.parse(readFileSync('extension/moonshine-small-ja-assets.json', 'utf8'));
-  await app.evaluate(({ session }) => {
-    session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] },
-      (_details, callback) => callback({ cancel: true }));
+  await app.evaluate(() => {
+    globalThis.fetch = () => { throw Error('Network disabled by offline ASR smoke'); };
   });
   await trigger(native.id);
   await phase('running', 90000);

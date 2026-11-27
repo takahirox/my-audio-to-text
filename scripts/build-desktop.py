@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Build the pinned desktop app and a reproducible, weight-free tarball."""
 import gzip
-import hashlib
 import json
 from pathlib import Path
 import platform
@@ -10,21 +9,18 @@ import shutil
 import subprocess
 import tarfile
 
+from graph_assets import copy_graph_resources, inventory
+
 ROOT = Path(__file__).resolve().parents[1]
 APP = "my-audio-to-text"
 SOURCE = ROOT / "desktop"
 TARGET = ROOT / "dist/desktop"
 EXTENSION = (
-    "app.css graph.css recorder.css graph.js graph-editor.js graph-palette.js graph-wire-router.js "
-    "graph-draft-session.js graph-library.js subgraphs.js web-voice-graph.js translation-scheduler.js "
-    "moonshine-small-ja-assets.json optional-asr-cache.js model-asset-cache.js icons/icon-32.png"
-).split()
-WEB = (
-    "audio.js audio-stream.js button-node.js capture-worklet.js display-node.js floating-display-node.js hold-node.js if-condition-policy.js "
-    "moonshine-small-ja-node.js moonshine-stream.js moonshine-worker.js number-node.js optional-asr-core.js "
-    "optional-asr-node.js optional-model-assets.js paired-text.js pipeline.js port-contracts.js speaker-output.js "
-    "synthesized-audio.js text-constant-node.js text-nodes.js text-summary-policy.js text-window-node.js "
-    "transcription-nodes.js translation-nodes.js translation-models.js translategemma-languages.js translategemma-context.js plamo-policy.js third-party-notices.txt licenses/moonshine.txt licenses/moonshine-third-party.txt"
+    "app.css graph.css recorder.css models.css graph.js graph-editor.js graph-palette.js graph-wire-router.js "
+    "graph-draft-session.js graph-library.js subgraphs.js web-voice-graph.js graph-runtime.js graph-actions.js "
+    "graph-model-preparation.js translation-scheduler.js model-definitions.js model-order.js "
+    "tab-source.js tab-audio-node.js tab-capture-source.js media-source.js page-output-node.js page-target.js "
+    "model-asset-cache.js icons/icon-32.png"
 ).split()
 
 
@@ -93,7 +89,7 @@ def main():
         cwd=SOURCE, text=True).strip())
     if not executable.is_file():
         raise SystemExit("Electron binary is missing. Run npm exec --prefix desktop -- install-electron.")
-    subprocess.run(["python3", str(ROOT / "scripts/prepare-optional-asr-assets.py")], check=True)
+    subprocess.run(["npm", "run", "prepare:graph-assets"], cwd=ROOT, check=True)
     if TARGET.exists():
         shutil.rmtree(TARGET)
     if system == "Darwin":
@@ -110,15 +106,15 @@ def main():
         if (file.is_file() and file.name not in {"package.json", "package-lock.json", "mac-target.m"}
                 and not (system == "Darwin" and file.suffix == ".py")):
             copy(file, app_root / "desktop" / file.name)
-    for source, names in (("extension", EXTENSION), ("web", WEB)):
-        for name in names:
-            copy(ROOT / source / name, app_root / source / name)
-    runtime = json.loads((ROOT / "scripts/optional-asr-runtime.json").read_text())
-    for entry in runtime["files"]:
-        name = Path("web/vendor/optional-asr") / entry["path"]
-        if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != entry["packagedSha256"]:
-            raise SystemExit(f"Invalid packaged Moonshine runtime: {name}")
-        copy(ROOT / name, app_root / name)
+    copy_graph_resources(app_root)
+    for name in EXTENSION:
+        copy(ROOT / "extension" / name, app_root / "extension" / name)
+    for pattern in ("*-assets.json", "*-cache.js"):
+        for file in sorted((ROOT / "extension").glob(pattern)):
+            copy(file, app_root / "extension" / file.name)
+    model_sources = subprocess.check_output(["node", "scripts/desktop-model-sources.mjs"], cwd=ROOT)
+    (app_root / "desktop/model-sources.json").write_bytes(model_sources)
+    inventory(app_root)
     (app_root / "package.json").write_text(json.dumps({
         "name": APP, "productName": "My Audio to Text", "version": "0.1.0",
         "type": "module", "main": "desktop/main.js",

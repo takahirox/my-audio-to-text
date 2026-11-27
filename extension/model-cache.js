@@ -1,15 +1,8 @@
-import { japaneseFrontendManifest } from './japanese-frontend-cache.js';
-import { textSummaryManifest } from './text-summary-cache.js';
 import { ModelAssetCache } from './model-asset-cache.js';
-import { moonshineManifest, moonshineJapaneseManifest } from './optional-asr-cache.js';
-import { ifConditionManifest } from './if-condition-cache.js';
-import { translateGemmaManifest } from './translategemma-cache.js';
-import { plamoManifest } from './plamo-cache.js';
 import { ttsManifest } from './tts-cache.js';
-import { qwen3TtsManifest } from './qwen3-tts-cache.js';
-import { cosyVoice3Manifest } from './cosyvoice3-cache.js';
 import { readLibrary, entryGraph } from './graph-library.js';
 import { compareModelDefinitions } from './model-order.js';
+import { modelDefinitions } from './model-definitions.js';
 
 const el = (tag, text) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; return element; };
 const channel = new BroadcastChannel('model-cache-updates');
@@ -18,20 +11,6 @@ let closed = false, savedNodes = [];
 try { savedNodes = readLibrary(localStorage).graphs.flatMap(entry => {
   try { return entryGraph(entry).nodes; } catch { return []; }
 }); } catch { /* Global asset recovery remains available with broken library storage. */ }
-const definitions = [
-  { id: 'kokoro-japanese', linkLabel: 'License & source', title: 'Kokoro Japanese · OpenJTalk frontend voice', size: 'About 1 MB', requirements: 'Statistical voice required only by the Japanese frontend, in addition to Kokoro weights.', manifest: japaneseFrontendManifest, url: '../web/licenses/kokoro-japanese.txt' },
-  { id: 'qwen3-tts', linkLabel: 'License & source', title: 'Qwen3-TTS 0.6B CustomVoice · streaming', size: '690 MB', requirements: 'Shared by Japanese/English and both voices. Desktop Worker WebGPU required; allow 2 GB storage, 6 GB free RAM/GPU memory (planning estimate). No CPU/cloud fallback.', manifest: qwen3TtsManifest, url: '../web/licenses/qwen3-tts.txt' },
-  { id: 'cosyvoice3', linkLabel: 'License & source', title: 'CosyVoice3 0.5B · streaming', size: '917 MB', requirements: 'Shared by English/Japanese. Desktop Worker WebGPU; allow 3 GB storage and 6 GB free RAM/GPU per Node (planning estimates). One reviewed reference voice. No CPU/cloud fallback; other languages/mobile unqualified.', manifest: cosyVoice3Manifest, url: '../web/licenses/cosyvoice3.txt' },
-  { id: 'meeting-summary-lfm2', linkLabel: 'License / terms', title: 'Text Processing · LFM2.5 1.2B JP', size: '749 MB download', requirements: 'Allow 2 GB storage and 4 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. AI results require verification.', manifest: () => textSummaryManifest('TextProcessingLfm2'), url: '../web/licenses/meeting-summary-lfm2.txt' },
-  { id: 'meeting-summary-qwen35', linkLabel: 'License & source', title: 'Text Processing · Qwen3.5 2B', size: '1.403 GB download', requirements: 'Allow 3 GB storage and 6 GB free RAM/GPU per Node (estimate). WebGPU shader-f16. AI results require verification.', manifest: () => textSummaryManifest('TextProcessingQwen35'), url: '../web/licenses/meeting-summary-qwen35.txt' },
-  { id: 'if-condition', linkLabel: 'License & source', title: 'IfCondition · XtremeDistil', size: '14 MB download', requirements: 'Allow 40 MB storage and 250 MB free RAM per active Node. CPU WASM.', manifest: ifConditionManifest, url: '../web/licenses/if-condition-model.txt' },
-  { id: 'moonshine-medium-en', linkLabel: 'License & source', title: 'Moonshine Medium Streaming English (245M)', size: '305 MB download', requirements: 'Allow 700 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineManifest, url: '../web/third-party-notices.txt' },
-  { id: 'moonshine-small-ja', linkLabel: 'License & source', title: 'Moonshine Small Streaming Japanese (123M)', size: '122 MB download', requirements: 'Allow 300 MB storage, 2 GB free RAM. CPU WASM.', manifest: moonshineJapaneseManifest, url: '../web/third-party-notices.txt' },
-  { id: 'plamo-3-translate-2b', title: 'PLaMo 3 Translate 2B · Experimental · 53 languages', size: '1.81 GB download shared by all 53 languages', requirements: 'Unconnected/auto target switches Japanese ↔ English; specify target_lang for other input languages. A concrete source_lang requires a concrete target_lang. Optional context TEXT uses native PFML3 reference context; empty omits it. Context alone never translates. Full prompt: 1,792 tokens with 256 output tokens reserved; overflow reports an error. Desktop Chromium CPU WASM, single thread. Allow 5 GB free storage and 6 GB free RAM per Node (estimate). Initial load and inference can be slow. Built with PLaMo.', manifest: plamoManifest, linkLabel: 'PLaMo Community License (full terms)', url: '../web/licenses/plamo-community-en.txt', links: [{ label: '日本語の利用規約', url: '../web/licenses/plamo-community-ja.txt' }, { label: 'Runtime notices', url: '../web/licenses/plamo-runtime.txt' }] },
-  { id: 'translategemma', title: 'TranslateGemma 4B', size: '3.112 GB shared download · per-request language codes', requirements: 'Allow 7 GB free storage and several GB free RAM/GPU memory. Worker WebGPU required; no CPU/cloud fallback.', manifest: translateGemmaManifest, linkLabel: 'License / terms', url: '../web/licenses/gemma-notices.txt' },
-  { id: 'supertonic3', linkLabel: 'License & source', type: 'Supertonic3', title: 'Supertonic 3', size: 'About 399 MB', voices: ['F1', 'M1'], url: '../web/licenses/tts-notices.txt' },
-  { id: 'kokoro', linkLabel: 'License & source', type: 'Kokoro', title: 'Kokoro 82M', size: 'About 93 MB', requirements: 'Japanese jf_alpha also needs the separate Kokoro Japanese frontend voice entry.', voices: ['jf_alpha', 'af_heart'], url: '../web/licenses/tts-notices.txt', links: [{ label: 'eSpeak NG source / build bundle (GPL-3.0-or-later)', url: '../web/tts-assets/phonemizer-source.tar.gz' }] },
-];
 class ModelCard {
   constructor(definition) {
     this.definition = definition; this.ticket = 0; this.caches = new Map(); this.failures = new Map();
@@ -176,7 +155,7 @@ class ModelCard {
   }
 }
 // Sort only the display copy, once. State updates keep these card instances in place.
-for (const definition of [...definitions].sort(compareModelDefinitions)) cards.push(new ModelCard(definition));
+for (const definition of [...modelDefinitions].sort(compareModelDefinitions)) cards.push(new ModelCard(definition));
 channel.onmessage = ({ data }) => {
   for (const card of cards) if (card.definition.id === data.id) {
     if (typeof data.deletedKey === 'string') card.failures.delete(data.deletedKey);

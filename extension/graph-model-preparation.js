@@ -54,24 +54,28 @@ export async function prepareGraphModelAssets(graph, { signal, onChange = () => 
   createCache = manifest => new ModelAssetCache(manifest) } = {}) {
   for (const requirement of graphModelRequirements(graph)) {
     signal?.throwIfAborted();
-    onChange(requirement, { state: 'Checking' });
+    let reportedState;
+    const report = view => {
+      if (signal?.aborted) return;
+      reportedState = view.state;
+      onChange(requirement, view);
+    };
+    report({ state: 'Checking' });
     try {
       const manifest = await requirement.manifest();
       signal?.throwIfAborted();
       const cache = createCache(manifest);
-      let view = await cache.inspect({ signal, onChange: view => {
-        if (!signal?.aborted) onChange(requirement, view);
-      } });
+      let view = await cache.inspect({ signal, onChange: report });
       signal?.throwIfAborted();
       // Cached graphs take the read-only fast path. A missing-file prepare
       // rechecks under the same lock in case another consumer finished first.
-      if (view.state === 'Not downloaded') view = await cache.prepare({ signal, onChange: view => {
-        if (!signal?.aborted) onChange(requirement, view);
-      } });
+      if (view.state === 'Not downloaded') view = await cache.prepare({ signal, onChange: report });
       signal?.throwIfAborted();
+      if (view.state !== reportedState) report(view);
       if (view.state !== 'Ready') throw Error(view.error || 'Model files did not become ready.');
     } catch (error) {
       signal?.throwIfAborted();
+      if (reportedState !== 'Error') report({ state: 'Error', error: error.message || String(error) });
       throw Error(`${requirement.title}: ${error.message || error}`, { cause: error });
     }
   }

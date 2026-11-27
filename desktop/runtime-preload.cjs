@@ -9,5 +9,10 @@ contextBridge.exposeInMainWorld('runtimeHost', {
   captureEnded: id => ipcRenderer.send('runtime:capture-ended', id),
   display: (id, node, port, item, provisional) => ipcRenderer.send('runtime:display', id, node, port, item, provisional),
   floatingDisplay: (id, text) => ipcRenderer.send('runtime:floating-display', id, text),
-  modelProgress: view => ipcRenderer.send('runtime:model-progress', view),
+  microphone: id => ipcRenderer.invoke('runtime:microphone', id),
+  status: (...args) => ipcRenderer.send('runtime:status', ...args),
+  actions: (...args) => ipcRenderer.send('runtime:actions', ...args),
+  audio: (...args) => ipcRenderer.send('runtime:audio', ...args),
+  preparation: (...args) => ipcRenderer.send('runtime:preparation', ...args),
+  modelProgress: (...args) => ipcRenderer.send('runtime:model-progress', ...args),
 });

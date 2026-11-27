@@ -9,9 +9,10 @@ editing. Compatibility depends on the focused field and the input it accepts.
 ## Build and launch
 
 Both builds use Node.js 22.12 or newer, npm, Python 3, and curl. The build pins
-Electron and verifies the shared Moonshine runtime against the repository
-checksums. The package contains the runtime and license notices. Download the
-model weights separately through **Models → Prepare**.
+Electron and verifies the shared Workers, JS/WASM runtime files, and other
+packaged assets against the repository checksums. The package includes
+manifests and license notices. **Models → Prepare** downloads weights into
+the desktop profile.
 
 ### Apple Silicon macOS
 
@@ -188,25 +189,80 @@ the focused output. The indicator shows the latest supplied TEXT beside Stop
 until an empty string clears it or the session ends. Existing saved graphs
 keep their original connections.
 
-Use **Graph Library** to create, duplicate, edit, select, and import or export
-individual graphs. The editor uses the same typed ports, settings, wiring
-validation, Auto Save, and Undo/Redo as the extension. If a recovered draft
-cannot be saved, repair the draft or use **Undo** to return to the saved
-graph. Desktop rejects graph nodes outside its supported subset and shows
-the original import error.
-A running graph uses the last saved snapshot taken at Start. Edits apply to the
-next session. Use **Live** to run graphs with a Display or Floating Display.
-Display panes appear inside the management window and Floating Display uses
-the session indicator.
-Graphs with both Display and a focused output start from the global shortcut
-or tray and retain the latest Display panes for inspection in Live.
+### Supported Nodes
 
-Models uses the shared [verified asset lifecycle](model-assets.md) and
-[Moonshine model pin and notices](optional-asr-nodes.md).
-The model card supports progress, cancellation, retry, and deletion.
-A session loads verified assets before requesting audio.
-Existing files are reverified and reused offline, and deletion is blocked
-while a session owns the model.
+| Category | Desktop Nodes |
+| --- | --- |
+| Sources and controls | Microphone audio, Text, Number, Button |
+| Speech recognition | Moonshine Small Streaming Japanese, Moonshine Medium Streaming English |
+| Translation | TranslateGemma 4B, experimental PLaMo 3 Translate 2B |
+| AI text and conditions | LFM2.5 1.2B JP, Qwen3.5 2B, IfCondition (XtremeDistil) |
+| Speech synthesis | Supertonic 3, Kokoro 82M, Qwen3-TTS Streaming, CosyVoice3 Streaming |
+| Text processors | Text formatter, Text accumulator, Text sliding window, Text window, Hold, Keyed text pair, Keyed text coalesce, Keyed paired text accumulator |
+| Outputs | Display, Floating Display, Focused application text output, Speaker, Audio player / WAV |
+
+Use **Graph Library** to create, duplicate, edit, and import or export graphs.
+Desktop uses the shared graph JSON, typed ports, settings, and validation.
+Import compatible extension graphs directly. For a parent with dependencies,
+use **Export JSON** and import the resulting Subgraph bundle from Graph Library.
+Select connected processing Nodes and choose **Create Subgraph** to make a
+reusable definition. Input and output destinations stay in the parent graph.
+Nested Subgraphs are outside the shared format. **Chrome tab audio** depends
+on the toolbar-invoked browser tab and Chrome's tab-capture APIs. Desktop
+identifies that Node when rejecting an incompatible import and preserves the
+source file. Focused text output uses the current native caret on desktop.
+
+**Live** runs graphs with a connected Display, Floating Display, Speaker, or
+Audio player / WAV. Button Nodes with executable paths appear under **Graph
+Actions**. A Button wired to `Hold.trigger` emits the held `TEXT` at every
+accepted click. Display renders text, keyed pairs, and keyed history snapshots
+in their configured tabs. Speaker plays clips and streaming audio. Audio player
+/ WAV retains generated clips for replay and saving. Start graphs with a
+focused output from the global shortcut or tray. Their Display panes are
+available in Live. Edits and shared definition changes apply at the next Start.
+
+### Models and hardware
+
+Choose a model and, where applicable, a voice in **Models**. Each entry lists
+download size, requirements, and license or source notices. The editor and
+Live link directly to graph requirements. Start verifies files for the
+executable graph, downloads missing ones with progress and cancellation,
+and initializes its Workers before requesting microphone access or running
+sources. Prepared files are reverified and reused offline. Stop the session
+before deleting cached files. Voice variants can share files.
+
+- **CPU/WASM** runs both Moonshine recognizers, IfCondition, Supertonic 3, and
+  Kokoro. Kokoro's Japanese `jf_alpha` voice also requires the OpenJTalk
+  frontend voice listed in Models. PLaMo uses CPU/WASM and requires
+  WebAssembly JSPI in Electron. Allow about 5 GB of free storage and 6 GB of
+  available RAM for PLaMo.
+- **Worker WebGPU** runs TranslateGemma, LFM2.5, Qwen3.5, Qwen3-TTS, and
+  CosyVoice3. LFM2.5 and Qwen3.5 also require `shader-f16`. Models can need
+  several GB of free RAM/GPU memory per Node. Live reports the specific
+  capability or initialization error if the machine cannot load a model.
+  WebGPU availability depends on the GPU, driver, and OS. Linux X11 can run
+  the same graphs where its Chromium Worker exposes the required features.
+
+See the [verified asset lifecycle](model-assets.md) for integrity and cache
+details and [Moonshine pins and notices](optional-asr-nodes.md) for ASR.
+
+### Example graphs
+
+Add the listed Nodes in Graph Editor, wire their named ports, and choose the
+saved graph in Live.
+
+- **Translation**. For Japanese to English, connect a Japanese `Text.value`
+  to `TranslateGemma4B.text`, then connect the translation's `text` output
+  to `Display.input1`. For PLaMo use the equivalent ports. Wire a second Text
+  Node holding `en` to `target_lang` to always request English.
+- **Text processing**. Connect `Text.value → TextProcessingLfm2.input1` and
+  `TextProcessingLfm2.result → Display.input1`. Set the system prompt to
+  “Summarize Input 1 in one English sentence.” Qwen3.5 uses the same ports.
+- **Speech synthesis**. Set Kokoro's voice to `af_heart` for English. Connect
+  `Text.value → Kokoro.text` and `Kokoro.audio → AudioOutput.audio` for
+  replay or WAV export. For automatic playback connect `audio` to
+  `SpeakerOutput.audio`. For Qwen3-TTS or CosyVoice3 connect the `stream`
+  output to `SpeakerOutput.audio`.
 
 ## Host boundaries
 
@@ -223,12 +279,12 @@ object, checks the caret, and uses the object's
 Both platform helpers use private process pipes. They send text and leave
 submission to the user.
 
-A sandboxed hidden renderer owns microphone capture, the shared Pipeline, and
-its Moonshine CPU/WASM Worker. The management and indicator renderers use
+A sandboxed hidden renderer owns microphone capture, the shared Pipeline,
+inference Workers, and Speaker playback. The management and indicator use
 their own narrowly scoped bridges. Only the runtime can request microphone
-access during an intentional Start. The packaged resources load through a
-local Electron protocol. HTTP(S) is limited to the pinned model file requests.
-Speech and text are processed locally.
+access during an intentional Start. Packaged resources load through a local
+Electron protocol. The main process transports only the pinned files for
+the current preparation. Speech and text are processed locally.
 
 The Electron profile holds `desktop-library.json`, graph editor draft
 recovery state, and the verified model cache. The profile lives in
@@ -263,6 +319,37 @@ changes, Stop, and cancellation without external keyboard-event authorization.
 The real-model smoke routes the licensed fixture through BlackHole 2ch and
 the app's microphone input. It temporarily selects BlackHole as the default
 input and restores the prior device.
+
+The packaged graph suite also exercises Subgraph extraction, Graph Actions,
+keyed display history, construction and startup boundaries for every AI
+Worker, and download cancellation, retry, and integrity checks. On a WebGPU
+machine the opt-in graph smoke uses real IfCondition, LFM2.5, and Kokoro
+weights, blocks the network during inference, and verifies WAV export.
+
+```sh
+DESKTOP_REAL_GRAPH_MODELS=1 npm run test:desktop
+```
+
+Use `DESKTOP_GRAPH_TEST_PROFILE` with a disposable test profile to reuse
+verified model files across graph smoke runs. If another desktop instance
+owns the default shortcut, run the macOS suite with a free
+`DESKTOP_TEST_SHORTCUT`, such as `Control+Alt+Super+F10`.
+
+### Issue #417 validation
+
+| Environment | Checks and results |
+| --- | --- |
+| Apple Silicon macOS 27.2.1, Electron 45.4.1 | Built, verified the ad-hoc signature, extracted, and launched the weight-free package. The desktop suite and opt-in real graph smoke passed. IfCondition ran on CPU/WASM and LFM2.5 ran on WebGPU with `shader-f16` in the same offline graph. Kokoro produced real offline audio, loaded it in the player, recovered Speaker playback after a test device failure, and saved a 24 kHz WAV. |
+| Debian 12 arm64, X11 in Docker | Built and tested the extracted Linux archive. With `DESKTOP_REAL_ASR=1`, the suite passed and Japanese Moonshine recognized the PulseAudio fixture offline and inserted TEXT at the Mousepad caret. |
+| Shared code and Chrome MV3 | `npm test` passed 947 tests. `npm run build:extension` verified 223 weight-free files. The focused MV3 graph, Subgraph, model/cache, and audio suites passed 47 tests. Chromium Playground TTS and PLaMo fixtures passed 25 tests. |
+
+The packaged boundary checks covered construction, pinned requirements, and
+Worker startup for all 11 AI Nodes on both desktop targets. Real desktop
+inference was exercised for IfCondition, LFM2.5, Kokoro (English), and Moonshine
+Small Japanese. The other seven AI Nodes had packaged boundary checks and
+shared regression coverage. The macOS native cross-application and virtual
+microphone options, Linux GPU inference, and the heavyweight MV3 streaming
+decoder smokes were skipped.
 
 ### Optional native Swift driver
 

@@ -12,9 +12,9 @@ export class DesktopSession {
 
   async start(plan) {
     if (this.current) return;
-    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map(), floatingText: '' };
+    const session = { id: crypto.randomUUID(), plan, queue: Promise.resolve(), admitted: false, displays: new Map(), floatingText: '', status: new Map() };
     this.current = session;
-    this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays });
+    this.update({ phase: 'preparing', error: '', microphone: false, displays: plan.displays, actions: plan.actions, id: session.id });
     try {
       if (plan.focused) await this.target.request('authorize', session.id);
       if (this.current !== session || this.state.phase !== 'preparing') return;
@@ -76,7 +76,7 @@ export class DesktopSession {
     await this.release(session).catch(failure => { error ||= failure.message; });
     if (this.current !== session || this.state.phase !== phase) return;
     this.current = null;
-    this.update({ phase: 'idle', error, microphone: false });
+    this.update({ phase: 'idle', error, microphone: false, actions: [], id: null });
   }
 
   insert(id, text) {

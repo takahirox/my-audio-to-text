@@ -36,8 +36,8 @@ const VIEWPORT_CONTROL_SPACE = 72;
 const typeLabel = contract => contract.name.split(' {')[0];
 export class GraphEditor {
   constructor(root, graph, { onDraft = () => {}, readOnly = false, onRetry = () => {}, onFlush = async () => {}, invalidSaved = false, definitions = [], kind = 'graph', graphId, onCreateSubgraph, onExport, onEditSubgraph,
-    nodeTypes = NODE_TYPES, makeDefault = defaultGraph, assertHostGraph = value => value, exportFile }) {
-    Object.assign(this, { definitions, kind, graphId, onCreateSubgraph, onExport, onEditSubgraph, nodeTypes, makeDefault, assertHostGraph, exportFile });
+    nodeTypes = NODE_TYPES, makeDefault = defaultGraph, assertHostGraph = value => value, exportFile, subgraphExecutionError }) {
+    Object.assign(this, { definitions, kind, graphId, onCreateSubgraph, onExport, onEditSubgraph, nodeTypes, makeDefault, assertHostGraph, exportFile, subgraphExecutionError });
     this.multiSelection = new Set();
     this.isMac = /mac|iphone|ipad|ipod/i.test(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent);
     this.root = root; this.onDraft = onDraft;
@@ -91,7 +91,7 @@ export class GraphEditor {
     commands.append(button('Import graph JSON', 'graph-import', () => importFile.click()), importFile);
     commands.append(button('Export graph JSON', 'graph-export', async () => {
       try {
-        const graph = this.onExport ? structuredClone(this.draft) : this.assert(this.draft);
+        const graph = this.onExport || this.exportFile ? structuredClone(this.draft) : this.assert(this.draft);
         if (this.exportFile) await this.exportFile(graph);
         else {
           const url = URL.createObjectURL(new Blob([this.onExport ? this.onExport(graph) : JSON.stringify(graph, null, 2) + '\n'], { type: 'application/json' }));
@@ -228,6 +228,7 @@ export class GraphEditor {
     viewportActions.append(this.zoomOut, this.zoomControl, this.zoomIn, fit);
     surface.append(this.scroll, viewportActions, this.validation, this.notices); viewport.append(surface); this.workspace.append(viewport, this.inspector, this.palette);
     root.replaceChildren(toolbar, this.workspace);
+    this.documentEvents = new AbortController();
     document.addEventListener('keydown', event => {
       // Dialog edits and pending creation must not undo the parent snapshot.
       if (event.target.closest('dialog')) return;
@@ -249,7 +250,7 @@ export class GraphEditor {
       if (['Delete', 'Backspace'].includes(event.key) && wire) {
         event.preventDefault(); event.stopPropagation(); this.disconnect(this.draft.edges[Number(wire.dataset.edge)]); this.scroll.focus({ preventScroll: true });
       }
-    });
+    }, { signal: this.documentEvents.signal });
     root.addEventListener('compositionstart', () => { this.composing = true; clearTimeout(this.editTimer); });
     root.addEventListener('compositionend', () => { this.composing = false; this.scheduleCommit(); if (this.refreshAfterComposition) setTimeout(() => { if (!this.composing) { this.refreshAfterComposition = false; this.draw(); } }, 0); });
     root.addEventListener('focusout', event => { if (event.target.matches('input, textarea, select, [contenteditable]') && !this.composing && !this.draggingNode) this.commitEdit(); });
@@ -260,11 +261,20 @@ export class GraphEditor {
     document.fonts?.ready.then(() => this.scheduleWires());
     this.draw();
   }
+  dispose() {
+    this.documentEvents.abort();
+    clearTimeout(this.editTimer);
+    this.togglePalette(false, false);
+    this.geometryObserver?.disconnect();
+    if (this.wireFrame) cancelAnimationFrame(this.wireFrame);
+  }
   scheduleWires() {
     if (this.wireFrame) return;
     this.wireFrame = requestAnimationFrame(() => { this.wireFrame = null; this.drawWires(); });
   }
-  assert(graph) { return this.assertHostGraph(assertGraph(graph, this.definitions)); }
+  assert(graph) {
+    return this.assertHostGraph(assertGraph(graph, this.definitions));
+  }
   definition(node) {
     try {
       const definition = nodeDefinition(node, this.draft, this.definitions);
@@ -378,8 +388,12 @@ export class GraphEditor {
     try {
       if (this.kind === 'subgraph') {
         const graph = assertSubgraph(this.draft);
-        assertSubgraphUpdate({ graphs: this.definitions }, this.graphId, graph);
-      } else resolveSubgraphs(this.draft, this.definitions);
+        this.assertHostGraph?.(graph);
+        assertSubgraphUpdate({ graphs: this.definitions }, this.graphId, graph, this.subgraphExecutionError);
+      } else {
+        const graph = resolveSubgraphs(this.draft, this.definitions);
+        this.assertHostGraph?.(graph);
+      }
     } catch (error) { boundaryError = error.message; }
     return [...(boundaryError ? [boundaryError] : validateGraph(this.draft, false, this.definitions)).map(message => `Error: ${message}`),
       ...(includeWarnings && !boundaryError && this.kind !== 'subgraph' ? graphWarnings(resolveSubgraphs(this.draft, this.definitions)).map(message => `Warning: ${message}`) : [])].join('\n');

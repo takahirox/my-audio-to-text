@@ -19,7 +19,7 @@ import { browserFixture } from './browser-fixture.js';
 
 const binary = resolve(process.env.DESKTOP_TEST_BINARY
   || 'dist/desktop/My Audio to Text.app/Contents/MacOS/my-audio-to-text');
-const defaultShortcut = 'Control+Alt+Super+D';
+const defaultShortcut = process.env.DESKTOP_TEST_SHORTCUT || 'Control+Alt+Super+D';
 const conflictingShortcut = 'Control+Alt+Super+F11';
 const audioFixture = resolve('tests/desktop/fixtures/konnichiwa.wav');
 const manifest = JSON.parse(await readFile('extension/moonshine-small-ja-assets.json', 'utf8'));
@@ -42,6 +42,10 @@ async function temp(t, prefix) {
 
 async function launch(t, existingProfile) {
   const profile = existingProfile ?? await mkdtemp(join(tmpdir(), 'desktop-macos-'));
+  if (!existingProfile && process.env.DESKTOP_TEST_SHORTCUT) {
+    const { DesktopLibrary } = await import('../../desktop/library.js');
+    new DesktopLibrary(join(profile, 'desktop-library.json'), defaultShortcut);
+  }
   let desktop;
   t.after(async () => {
     await desktop?.close().catch(() => {});
@@ -1113,9 +1117,8 @@ test('macOS package captures a virtual microphone and delivers a real offline Ja
   const entry = await management.evaluate(graph => window.desktop.add('Japanese loopback smoke', graph), live);
   const prepare = await management.evaluate(() => window.desktop.model('modelPrepare'));
   assert.equal(prepare.state, 'Ready', JSON.stringify(prepare));
-  await desktop.evaluate(({ session }) => {
-    session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] },
-      (_details, callback) => callback({ cancel: true }));
+  await desktop.evaluate(() => {
+    globalThis.fetch = () => { throw Error('Network disabled by offline ASR smoke'); };
   });
 
   const previousInput = run('input');

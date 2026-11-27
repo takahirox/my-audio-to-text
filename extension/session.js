@@ -1,7 +1,7 @@
 import { graphModelRequirements, prepareGraphModelAssets } from './graph-model-preparation.js';
 import { microphoneCaptureError } from './media-source.js';
 import { authorizePage } from './page-target.js';
-import { buttonLabel } from '../web/button-node.js';
+import { graphActions, pressGraphButton } from './graph-actions.js';
 import { assertGraph, executableGraph, graphExecutionFingerprint, defaultGraph, hasTranslation, INPUT_TYPES, FIELD_TYPES, ASR_TYPES, NODE_TYPES } from './graph.js';
 import { buildGraph } from './graph-runtime.js';
 import { SpeakerOutputNode } from '../web/speaker-output.js';
@@ -137,43 +137,15 @@ export class TabSession {
   graphActions() {
     const owner = this.session || null;
     const graph = owner?.description || (this.view.state === 'idle' ? executableGraph(this.graph) : this.view.activeGraph);
-    return (graph?.nodes || []).filter(node => node.type === 'Button').sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0).map(spec => {
-      const entry = owner?.pipeline?.entries.get(spec.id);
-      const reachable = entry?.reachable || new Set();
-      const busy = [...(owner?.actions?.values() || [])].some(action => [...reachable].some(target => action.has(target)));
-      const failed = [...reachable].some(target => target.failed);
-      const reason = this.view.state !== 'running' || owner?.pipeline?.state !== 'running' ? 'Start a session to use graph actions.'
-        : failed ? 'Action path unavailable; start a fresh session.' : busy ? 'Action busy; waiting for downstream work.' : '';
-      // Capture the exact session in each callback. Old DOM handlers cannot
-      // acquire the context of a replacement session that reused this Node ID.
-      return { id: spec.id, label: buttonLabel(spec.settings.label), disabled: !!reason, reason,
-        invoke: () => this.pressButton(spec.id, owner) };
-    });
+    return graphActions(graph, owner, this.view.state === 'running').map(action => ({
+      ...action, invoke: () => this.pressButton(action.id, owner),
+    }));
   }
-  async pressButton(id, owner = this.session) {
-    if (!owner || this.session !== owner || this.view.state !== 'running' || owner.pipeline?.state !== 'running') return false;
-    const entry = owner.pipeline.entries.get(id);
-    if (owner.description.nodes.find(node => node.id === id)?.type !== 'Button' || !entry?.active || entry.closed || entry.failed) return false;
-    owner.actions ||= new Map();
-    if ([...entry.reachable].some(target => target.failed) || [...owner.actions.values()].some(action => [...entry.reachable].some(target => action.has(target)))) return false;
-    owner.actions.set(id, entry.reachable);
-    this.update();
-    try {
-      entry.node.press(); // one ordinary context.emit('trigger', 1)
-      // Observe the existing queues and owned async work until this path settles.
-      // UI admission is bounded to one action per overlapping downstream path.
-      let previous;
-      while (this.session === owner && owner.pipeline.state !== 'disposed') {
-        const queues = [...entry.reachable].flatMap(target => [target.queue, ...[...target.work].map(work => work.done)]);
-        if (previous && queues.length === previous.length && queues.every((queue, i) => queue === previous[i])) break;
-        previous = queues;
-        await Promise.allSettled(queues);
-      }
-      return true;
-    } finally {
-      owner.actions.delete(id);
-      if (this.session === owner) this.update();
-    }
+  pressButton(id, owner = this.session) {
+    return pressGraphButton(owner, id, {
+      running: this.session === owner && this.view.state === 'running',
+      owns: () => this.session === owner, onChange: () => this.update(),
+    });
   }
   async start(tabId, { microphoneGesture = false, speakerGesture = false } = {}) {
     if (this.session || this.closed || this.graphUnavailable) return; // A second invocation never retargets live capture.

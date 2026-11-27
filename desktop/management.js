@@ -1,13 +1,18 @@
 import { GraphEditor } from '../extension/graph-editor.js';
 import { GraphDraftSession, recoveryDrafts } from '../extension/graph-draft-session.js';
 import { DisplayNode } from '../web/display-node.js';
+import { audioToWav } from '../web/synthesized-audio.js';
+import { graphModelRequirements } from '../extension/graph-model-preparation.js';
+import { resolveSubgraphs } from '../extension/subgraphs.js';
+import { desktopModels } from './models.js';
 import { assertDesktopGraph, defaultDesktopGraph, desktopNodeTypes, planGraph } from './graph.js';
 
 const host = window.desktop;
 const element = id => document.getElementById(id);
 const sections = [...document.querySelectorAll('main > section')];
 const nav = [...document.querySelectorAll('nav [data-page]')];
-const displays = new Map();
+const displays = new Map(), audioPlayers = new Map(), modelViews = new Map(), statusRows = new Map();
+let modelOperation, sessionId, licenseTicket = 0;
 let current, currentPage, editor, draft, editorId, lastLibrary, lastDisplaySpecs, actionError = '';
 
 function errorNotice() { element('errors').textContent = actionError || current?.session.error || ''; }
@@ -22,6 +27,7 @@ function run(action) {
 
 function button(label, action) {
   const control = document.createElement('button');
+  control.type = 'button';
   control.textContent = label;
   control.onclick = run(action);
   return control;
@@ -34,7 +40,7 @@ function navigate(page) {
     if (control.dataset.page === (page === 'editor' ? 'library' : page)) control.setAttribute('aria-current', 'page');
     else control.removeAttribute('aria-current');
   }
-  if (page === 'models') void modelAction('modelStatus');
+  if (page === 'models') void inspectModel();
 }
 
 async function flush() {
@@ -42,24 +48,40 @@ async function flush() {
   await draft?.flush();
 }
 
+function bindDraft(entry, graph) {
+  draft?.close();
+  draft = new GraphDraftSession({
+    id: entry.id, graph, base: entry.revision, storage: localStorage, sessionId: crypto.randomUUID(),
+    validate: graph => assertDesktopGraph(graph, current.library.graphs, entry.kind),
+    persist: async (graph, revision) => ({ base: (await host.save(entry.id, revision, graph)).revision }),
+    onSaved: graph => { editor.saved = structuredClone(graph); editor.updateSummary(); renderGraphModels(); },
+    onState: (state, error) => editor.setSaveState(state, error),
+  });
+}
+
 async function edit(entry) {
   if (editorId !== entry.id) {
     await flush();
-    draft?.close();
-    const graph = assertDesktopGraph(entry.graph);
-    if (!editor) {
-      editor = new GraphEditor(element('graph-editor'), graph, {
-        nodeTypes: desktopNodeTypes, makeDefault: defaultDesktopGraph, assertHostGraph: assertDesktopGraph,
-        onDraft: graph => draft.changed(graph), onRetry: run(flush), onFlush: flush, exportFile: host.exportGraph,
-      });
-    } else editor.setSaved(graph);
-    draft = new GraphDraftSession({
-      id: entry.id, graph, base: entry.revision, storage: localStorage, sessionId: crypto.randomUUID(),
-      validate: assertDesktopGraph,
-      persist: async (graph, revision) => ({ base: (await host.save(entry.id, revision, graph)).revision }),
-      onSaved: graph => { editor.saved = structuredClone(graph); editor.updateSummary(); },
-      onState: (state, error) => editor.setSaveState(state, error),
+    const graph = assertDesktopGraph(entry.graph, current.library.graphs, entry.kind);
+    editor?.dispose();
+    const mount = document.createElement('div');
+    element('graph-editor').replaceChildren(mount);
+    editor = new GraphEditor(mount, graph, {
+      nodeTypes: desktopNodeTypes, makeDefault: defaultDesktopGraph,
+      definitions: current.library.graphs, kind: entry.kind, graphId: entry.id, subgraphExecutionError: null,
+      assertHostGraph: graph => assertDesktopGraph(graph, current.library.graphs, entry.kind),
+      onDraft: graph => draft.changed(graph), onRetry: run(flush), onFlush: flush,
+      exportFile: graph => host.exportGraph(graph, entry.id),
+      onEditSubgraph: run(id => edit(current.library.graphs.find(candidate => candidate.id === id))),
+      onCreateSubgraph: async (shared, revision) => {
+        const library = await host.extract(entry.id, revision, shared);
+        const saved = library.graphs.find(candidate => candidate.id === entry.id);
+        bindDraft(saved, saved.graph);
+        editor.saved = structuredClone(saved.graph);
+        return library;
+      },
     });
+    bindDraft(entry, graph);
     const checkpoints = recoveryDrafts(localStorage, entry.id).filter(item => item.base === entry.revision);
     for (const checkpoint of checkpoints) draft.keys.add(checkpoint.key);
     const [recovery] = checkpoints;
@@ -73,6 +95,7 @@ async function edit(entry) {
   }
   element('editor-title').textContent = entry.name;
   navigate('editor');
+  renderGraphModels();
   editor.scheduleWires();
 }
 
@@ -89,7 +112,7 @@ function renderLibrary(library) {
     row.className = 'panel graph-entry';
     row.setAttribute('aria-label', entry.name);
     const name = document.createElement('strong');
-    name.textContent = entry.name;
+    name.textContent = entry.kind === 'subgraph' ? `${entry.name} · Subgraph` : entry.name;
     const actions = document.createElement('div');
     actions.className = 'actions';
     if (entry.id === library.selected) {
@@ -97,7 +120,7 @@ function renderLibrary(library) {
       selected.textContent = 'Shortcut graph';
       selected.className = 'current-graph';
       actions.append(selected);
-    } else {
+    } else if (entry.kind !== 'subgraph') {
       const select = button('Use for shortcut', () => host.select(entry.id));
       select.dataset.graphId = entry.id; select.dataset.action = 'select';
       actions.append(select);
@@ -107,17 +130,18 @@ function renderLibrary(library) {
     actions.append(editButton, button('Duplicate', async () => {
       await flush();
       const saved = current.library.graphs.find(candidate => candidate.id === entry.id);
-      await edit(await host.add(`${saved.name.slice(0, 115)} copy`, saved.graph));
+      await edit(await host.add(`${saved.name.slice(0, 115)} copy`, saved.graph, saved.kind === 'subgraph' ? saved.kind : undefined));
     }), button('Export JSON', async () => {
       await flush();
-      await host.exportGraph(current.library.graphs.find(candidate => candidate.id === entry.id).graph);
+      await host.exportGraph(current.library.graphs.find(candidate => candidate.id === entry.id).graph, entry.id);
     }));
     row.append(name, actions);
     graphs.append(row);
     try {
-      planGraph(entry.graph, 'live');
+      if (entry.kind === 'subgraph') continue;
+      planGraph(entry.graph, 'live', library.graphs);
       picker.add(new Option(entry.name, entry.id));
-    } catch { /* Graphs that require an external caret run from the tray or shortcut. */ }
+    } catch { /* Keep drafts and graphs requiring a native caret in the library. */ }
   }
   if (Array.from(picker.options).some(option => option.value === previous)) picker.value = previous;
   if (active?.graphId && currentPage === 'library') {
@@ -127,26 +151,154 @@ function renderLibrary(library) {
   }
 }
 
-function modelUpdate(model) {
-  const state = model?.state || 'Checking cache…';
-  const busy = ['Checking cache…', 'Downloading'].includes(state);
-  element('model-status').textContent = state;
+const modelPicker = element('model-picker');
+for (const model of desktopModels) modelPicker.add(new Option(model.title, model.key));
+modelPicker.value = 'moonshine-small-ja';
+const selectedModel = () => desktopModels.find(model => model.key === modelPicker.value);
+
+function progressBar(id, view) {
+  const progress = element(id);
+  progress.hidden = view?.state !== 'Downloading';
+  if (view?.totalBytes) {
+    progress.max = view.totalBytes;
+    progress.value = view.downloadedBytes || 0;
+  }
+}
+
+function renderModel() {
+  const model = modelViews.get(modelPicker.value), state = model?.state || 'Unchecked';
+  const active = current?.session.phase !== 'idle', busy = !!modelOperation;
+  element('model-status').textContent = state === 'Checking' ? 'Checking cache…' : state;
   element('model-error').textContent = model?.error || '';
   const prepare = element('prepare');
   prepare.textContent = ['Error', 'Canceled'].includes(state) ? 'Retry' : 'Prepare';
-  prepare.disabled = busy || state === 'Ready';
+  prepare.disabled = active || busy || state === 'Ready';
   prepare.onclick = () => modelAction(model?.retry || 'modelPrepare');
-  element('cancel-download').hidden = !busy || state === 'Checking cache…';
-  element('delete-model').disabled = busy || !model?.cachedBytes || current?.session.phase !== 'idle';
-  const progress = element('model-progress');
-  progress.hidden = state !== 'Downloading';
-  if (model?.totalBytes) { progress.max = model.totalBytes; progress.value = model.downloadedBytes || 0; }
+  element('cancel-download').hidden = modelOperation?.key !== modelPicker.value || modelOperation.action !== 'modelPrepare';
+  element('delete-model').disabled = active || busy || !model?.cachedBytes;
+  progressBar('model-progress', model);
 }
 
-const modelAction = run(async action => {
-  const result = await host.model(action);
-  if (result) modelUpdate(result);
+const modelAction = run(async (action, key = modelPicker.value) => {
+  await host.model(action, key);
+  // Progress and the final state arrive through the model update event.
 });
+
+function modelUpdate({ key, value, operation, reset }) {
+  modelOperation = operation;
+  if (reset) modelViews.clear();
+  modelViews.set(key, value);
+  renderModel();
+  renderGraphModels();
+}
+
+async function inspectModel() {
+  const model = selectedModel(), ticket = ++licenseTicket;
+  element('model-title').textContent = model.title;
+  element('model-size').textContent = model.size;
+  element('model-requirements').textContent = model.requirements || '';
+  const notice = element('model-license');
+  notice.textContent = '';
+  const verifying = modelOperation ? undefined : modelAction('modelStatus');
+  const licenses = [model.url, ...(model.links || []).map(link => link.url).filter(url => url.endsWith('.txt'))];
+  try {
+    const contents = await Promise.all(licenses.map(async url => {
+      const response = await fetch(url);
+      if (!response.ok) throw Error('License notice unavailable.');
+      return response.text();
+    }));
+    if (ticket === licenseTicket) notice.textContent = contents.join('\n\n');
+  } catch (error) { if (ticket === licenseTicket) notice.textContent = error.message; }
+  await verifying;
+}
+
+function renderGraphModels() {
+  if (!current) return;
+  for (const [id, graph] of [
+    ['editor-models', editor?.saved],
+    ['live-models', current.library.graphs.find(entry => entry.id === element('live-graph').value)?.graph],
+  ]) {
+    const container = element(id);
+    let requirements = [];
+    if (graph) try { requirements = graphModelRequirements(resolveSubgraphs(graph, current.library.graphs)); }
+    catch { /* Graph validation presents the structural error. */ }
+    const signature = JSON.stringify(requirements.map(({ key }) => [key, modelViews.get(key)?.state]));
+    if (signature === container.dataset.models) continue;
+    container.dataset.models = signature;
+    container.hidden = !requirements.length;
+    container.replaceChildren(...requirements.map(({ key, title }) => {
+      const label = desktopModels.find(model => model.key === key)?.title || title;
+      const state = modelViews.get(key)?.state;
+      return button(state ? `${label} · ${state}` : label, () => {
+        modelPicker.value = key;
+        navigate('models');
+      });
+    }));
+  }
+}
+
+function renderPreparation(view) {
+  const label = element('preparation');
+  label.hidden = !view;
+  label.textContent = view ? `${view.title} · ${view.state}` : '';
+  progressBar('preparation-progress', view);
+}
+
+function renderActions({ id, phase, actions = [] }) {
+  const container = element('live-action-buttons');
+  element('live-actions').hidden = !actions.length;
+  const existing = new Map([...container.children].map(control => [control.dataset.node, control]));
+  for (const [index, action] of actions.entries()) {
+    const control = existing.get(action.id) || button(action.label, () => {});
+    existing.delete(action.id);
+    control.dataset.node = action.id;
+    control.textContent = action.label;
+    control.disabled = phase !== 'running' || !!action.disabled;
+    control.title = action.reason || action.id;
+    control.onclick = run(() => host.press(id, action.id));
+    if (container.children[index] !== control) container.insertBefore(control, container.children[index] || null);
+  }
+  for (const control of existing.values()) control.remove();
+}
+
+function renderSpeakerControl() {
+  element('enable-speakers').hidden = !['running', 'stopping'].includes(current?.session.phase)
+    || ![...statusRows.values()].some(row => row.dataset.needsActivation === 'true');
+}
+
+function showStatus({ node, message, severity, needsActivation }) {
+  const list = element('node-status');
+  let row = statusRows.get(node);
+  if (!row) {
+    row = document.createElement('li');
+    statusRows.set(node, row);
+    list.append(row);
+  }
+  row.textContent = `${node} · ${message}`;
+  row.dataset.severity = severity || '';
+  row.dataset.needsActivation = String(needsActivation);
+  list.hidden = false;
+  renderSpeakerControl();
+}
+
+function clearAudio() {
+  for (const { url } of audioPlayers.values()) URL.revokeObjectURL(url);
+  audioPlayers.clear();
+  element('audio-outputs').replaceChildren();
+}
+
+function showAudio({ clip, node, audio }) {
+  if (audioPlayers.has(clip)) return;
+  const url = URL.createObjectURL(audioToWav(audio));
+  const card = document.createElement('article'), player = document.createElement('audio');
+  card.className = 'panel actions';
+  player.controls = true;
+  player.src = url;
+  player.setAttribute('aria-label', `Generated speech · ${node}`);
+  card.append(player, button('Save WAV', () => host.saveWav(clip)));
+  audioPlayers.set(clip, { url });
+  element('audio-outputs').append(card);
+}
 
 function renderDisplays(specs) {
   const signature = JSON.stringify(specs);
@@ -201,6 +353,22 @@ function showItem({ node, port, item }) { displays.get(node)?.render(item, port)
 function update(value) {
   current = value;
   renderLibrary(value.library);
+  if (editor) editor.definitions = value.library.graphs;
+  modelOperation = value.modelOperation;
+  modelViews.clear();
+  for (const [key, model] of Object.entries(value.models)) modelViews.set(key, model);
+  if (value.session.id && value.session.id !== sessionId) {
+    sessionId = value.session.id;
+    statusRows.clear();
+    element('node-status').replaceChildren();
+    element('node-status').hidden = true;
+    clearAudio();
+  }
+  value.nodeStatus.forEach(showStatus);
+  renderSpeakerControl();
+  renderActions(value.session);
+  renderPreparation(value.session.phase === 'preparing' ? value.preparation : undefined);
+  renderGraphModels();
   element('library-shortcut').textContent = value.shortcutError ? 'See Settings' : value.library.shortcut;
   element('accessibility-help').textContent = value.platform === 'darwin'
     ? 'Enable My Audio to Text in System Settings → Privacy & Security → Device Control and Data Access (Accessibility). Use a supported text field for dictation.'
@@ -221,7 +389,7 @@ function update(value) {
     for (const port of Object.keys(display.inputs)) display.render([], port);
   }
   value.items.forEach(showItem);
-  modelUpdate(value.model);
+  renderModel();
   errorNotice();
 }
 
@@ -240,19 +408,28 @@ element('import-file').onchange = run(async ({ target }) => {
     const file = target.files[0];
     if (!file) return;
     await flush();
-    const graph = assertDesktopGraph(JSON.parse(await file.text()));
-    await edit(await host.add(file.name.replace(/\.json$/i, '').slice(0, 120) || 'Imported graph', graph));
+    await edit(await host.importGraph(file.name.replace(/\.json$/i, '').slice(0, 120) || 'Imported graph', JSON.parse(await file.text())));
   } finally { target.value = ''; }
 });
 element('shortcut-form').onsubmit = run(async event => { event.preventDefault(); await host.shortcut(element('shortcut').value); });
 element('cancel-download').onclick = () => modelAction('modelCancel');
 element('delete-model').onclick = () => modelAction('modelDelete');
+modelPicker.onchange = () => { renderModel(); void inspectModel(); };
+element('live-graph').onchange = () => {
+  element('start-live').disabled = current.session.phase !== 'idle' || !element('live-graph').value;
+  renderGraphModels();
+};
 element('start-live').onclick = run(async () => { await flush(); await host.startLive(element('live-graph').value); });
 element('stop-live').onclick = run(host.stop);
 element('cancel-live').onclick = run(host.cancel);
+element('enable-speakers').onclick = run(() => host.enableSpeakers(current.session.id));
 host.onUpdate(update);
 host.onNavigate(page => { actionError = ''; navigate(page); errorNotice(); });
 host.onDisplay(showItem);
 host.onModel(modelUpdate);
+host.onAudio(showAudio);
+host.onNodeStatus(showStatus);
+host.onPreparation(renderPreparation);
 update(await host.get());
+(await host.audio()).forEach(showAudio);
 navigate('library');

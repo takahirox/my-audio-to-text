@@ -64,7 +64,9 @@ test('blocking asset preparation skips download preparation for verified and mod
     await prepareGraphModelAssets(modelFreeGraph(), { createCache });
     assert.equal(manifests, 0); assert.equal(inspections, 0);
     const selected = graph(); selected.nodes.push(graphNode('TranslateGemma4B', 'repeat'));
-    await prepareGraphModelAssets(selected, { createCache });
+    const changes = [];
+    await prepareGraphModelAssets(selected, { createCache, onChange: (_, view) => changes.push(view.state) });
+    assert.deepEqual(changes, ['Checking', 'Ready']);
     assert.equal(manifests, 1); assert.equal(inspections, 1);
   } finally { globalThis.fetch = originalFetch; }
 });
@@ -85,7 +87,7 @@ test('blocking asset preparation reports model download errors and honors cancel
     });
     const options = { createCache, signal: controller.signal, onChange: (requirement, view) => events.push([requirement.id, view.state]) };
     await assert.rejects(prepareGraphModelAssets(graph(), options), /TranslateGemma 4B.*Offline fixture/);
-    assert.equal(downloads, 1); assert.deepEqual(events, [['translategemma', 'Checking'], ['translategemma', 'Downloading']]);
+    assert.equal(downloads, 1); assert.deepEqual(events, [['translategemma', 'Checking'], ['translategemma', 'Downloading'], ['translategemma', 'Error']]);
     cancel = true;
     await assert.rejects(prepareGraphModelAssets(graph(), options), { name: 'AbortError' });
     assert.equal(downloads, 1, 'cancellation must prevent any subsequent fetch');

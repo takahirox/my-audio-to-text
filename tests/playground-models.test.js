@@ -1,3 +1,4 @@
+import { modelDefinitions } from '../extension/model-definitions.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -22,10 +23,9 @@ test('static primary model navigation is exhaustive and preserves direct/return 
   assert.equal(document.querySelectorAll('section').length, 4);
   assert.deepEqual([...document.querySelectorAll('section a')].map(a => a.getAttribute('href')).sort(), modelPages.map(slug => `./nodes/${slug}/`).sort());
   assert.equal(document.querySelectorAll('script, button').length, 0);
-  const catalog = readFileSync('extension/model-cache.js', 'utf8').split('const definitions = [')[1].split('class ModelCard')[0];
   const aliases = { 'moonshine-small-ja': 'moonshine-small-ja', 'moonshine-medium-en': 'moonshine-medium', 'meeting-summary-lfm2': 'text-summary-lfm2',
     'meeting-summary-qwen35': 'text-summary-qwen35' };
-  const primary = [...catalog.matchAll(/\{ id: '([\w-]+)'/g)].map(match => match[1])
+  const primary = modelDefinitions.map(({ id }) => id)
     .filter(id => !['kokoro-japanese'].includes(id)).map(id => aliases[id] || id);
   assert.deepEqual(primary.sort(), [...modelPages].sort(), 'Every current catalog entry has its own test');
   for (const slug of modelPages) {
@@ -59,5 +59,5 @@ test('deployment stages all required runtimes and extension packaging includes i
   const prepare = readFileSync('scripts/prepare-playground-assets.py', 'utf8');
   for (const runtime of ['assets', 'translation-assets', 'tts-assets', 'correction-assets', 'optional-asr-assets', 'text-summary-assets']) assert.ok(prepare.includes(`'${runtime}'`));
   assert.match(readFileSync('.github/workflows/pages.yml', 'utf8'), /npm ci[\s\S]*npm run prepare:playground-assets/);
-  assert.match(readFileSync('scripts/build-extension.py', 'utf8'), /"optional-model-assets.js"/);
+  assert.match(readFileSync('scripts/graph_assets.py', 'utf8'), /"optional-model-assets.js"/);
 });

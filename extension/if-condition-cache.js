@@ -1,3 +1,4 @@
+import { packagedGraphHost } from '../web/optional-model-assets.js';
 import { IF_CONDITION_MODEL } from '../web/if-condition-model.js';
 import { defineAssetSet, ModelAssetCache, MODEL_CACHE_NAME } from './model-asset-cache.js';
 
@@ -7,7 +8,7 @@ export async function ifConditionManifest() {
   return defineAssetSet({ ...IF_CONDITION_MODEL, files: await response.json() });
 }
 export async function cacheOnlyIfConditionRuntime(env) {
-  if (globalThis.location?.protocol !== 'chrome-extension:') throw new Error('IfCondition requires an extension-owned Worker.');
+  if (!packagedGraphHost()) throw new Error('IfCondition requires a packaged graph Worker.');
   const manifest = await ifConditionManifest(), assets = new ModelAssetCache(manifest);
   const view = await assets.inspect({ retain: true });
   if (view.state !== 'Ready') throw new Error(view.error || 'IfCondition model assets missing or evicted. Use Retry models in Live, or retry preparation in Models.');

@@ -118,7 +118,7 @@ export function exportDraft(entry, graph, library) {
   return exportEntry({ ...metadata, graph }, library);
 }
 
-export function assertSubgraphUpdate(library, id, graph) {
+export function assertSubgraphUpdate(library, id, graph, executionError = webVoiceError) {
   const entry = library.graphs.find(entry => entry.id === id);
   if (!entry) return;
   const parents = references(library, id);
@@ -144,11 +144,34 @@ export function assertSubgraphUpdate(library, id, graph) {
   for (const parent of parents) {
     // Every compatible parent can be selected from a field mic. Preserve that
     // capability even when it is not the legacy Web voice default.
-    if (webVoiceError(resolveSubgraphs(parent.graph, library.graphs))) continue;
-    const reason = webVoiceError(resolveSubgraphs(parent.graph, candidate));
+    if (!executionError || executionError(resolveSubgraphs(parent.graph, library.graphs))) continue;
+    const reason = executionError(resolveSubgraphs(parent.graph, candidate));
     if (reason) incompatible.push(`${parent.name}: ${reason}`);
   }
   if (incompatible.length) throw Error(`Cannot break Web voice paths. Referenced by: ${incompatible.join('; ')}. ${resolution}`);
+}
+export function importGraphBundle(value, definitions, assertHostGraph = () => {}) {
+  if (value.version !== 1 || !Array.isArray(value.graphs) || !value.graphs.length || !value.graphs.some(entry => entry.id === value.root)) throw Error('Invalid graph dependency bundle.');
+  const ids = new Map();
+  for (const entry of value.graphs) {
+    if (!validText(entry.id) || ids.has(entry.id) || !validText(entry.name) || typeof entry.description !== 'string' || !['graph', 'subgraph'].includes(entry.kind)) throw Error('Invalid or duplicate bundled graph.');
+    ids.set(entry.id, token());
+  }
+  const imported = value.graphs.map(entry => {
+    const graph = structuredClone(entry.graph);
+    if (!Array.isArray(graph?.nodes)) throw Error('Invalid bundled graph.');
+    for (const node of graph.nodes) if (node.type === 'Subgraph') {
+      if (!ids.has(node.subgraphId)) throw Error(`Missing bundled dependency ${node.subgraphId}. Export the parent with its dependencies.`);
+      node.subgraphId = ids.get(node.subgraphId);
+    }
+    const stamp = now();
+    return { ...entry, id: ids.get(entry.id), graph, revision: token(), createdAt: stamp, updatedAt: stamp };
+  });
+  // Fresh IDs on every import never overwrite definitions already in use.
+  const candidate = { graphs: [...definitions, ...imported] };
+  for (const entry of imported) { entry.graph = entryGraph(entry, candidate); assertHostGraph(resolvedEntryGraph(entry, candidate)); }
+  const root = imported.find(entry => entry.id === ids.get(value.root));
+  return { root, entries: [...imported.filter(entry => entry !== root), root] };
 }
 export class GraphLibrary {
   constructor(storage, locks = globalThis.navigator?.locks) { this.storage = storage; this.locks = locks; }
@@ -240,27 +263,7 @@ export class GraphLibrary {
   import(value, name, revision) {
     if (value?.format !== 'graph-bundle') return this.create({ name, graph: value }, revision);
     return this.change(library => {
-      if (value.version !== 1 || !Array.isArray(value.graphs) || !value.graphs.length || !value.graphs.some(entry => entry.id === value.root)) throw Error('Invalid graph dependency bundle.');
-      const ids = new Map();
-      for (const entry of value.graphs) {
-        if (!validText(entry.id) || ids.has(entry.id) || !validText(entry.name) || typeof entry.description !== 'string' || !['graph', 'subgraph'].includes(entry.kind)) throw Error('Invalid or duplicate bundled graph.');
-        ids.set(entry.id, token());
-      }
-      const imported = value.graphs.map(entry => {
-        const graph = structuredClone(entry.graph);
-        if (!Array.isArray(graph?.nodes)) throw Error('Invalid bundled graph.');
-        for (const node of graph.nodes) if (node.type === 'Subgraph') {
-          if (!ids.has(node.subgraphId)) throw Error(`Missing bundled dependency ${node.subgraphId}. Export the parent with its dependencies.`);
-          node.subgraphId = ids.get(node.subgraphId);
-        }
-        const stamp = now();
-        return { ...entry, id: ids.get(entry.id), graph, revision: token(), createdAt: stamp, updatedAt: stamp };
-      });
-      // Fresh IDs on every import never overwrite definitions already in use.
-      const candidate = { ...library, graphs: [...library.graphs, ...imported] };
-      for (const entry of imported) { entry.graph = entryGraph(entry, candidate); resolvedEntryGraph(entry, candidate); }
-      const root = imported.find(entry => entry.id === ids.get(value.root));
-      library.graphs.push(...imported.filter(entry => entry !== root), root);
+      library.graphs.push(...importGraphBundle(value, library.graphs).entries);
     }, { revision });
   }
   recoverLegacy(revision) {
