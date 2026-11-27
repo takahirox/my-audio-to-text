@@ -1,8 +1,0 @@
-{
-  "name": "my-audio-to-text-desktop-build",
-  "private": true,
-  "type": "module",
-  "devDependencies": {
-    "electron": "45.4.1"
-  }
-}
