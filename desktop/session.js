@@ -1,4 +1,4 @@
-// The main process authorizes committed output from Start through the final drain.
+// The main process authorizes focused TEXT delivery from Start through the Stop drain.
 export class DesktopSession {
   constructor({ target, run, onChange, onDisplay }) {
     Object.assign(this, { target, run, onChange, onDisplay });
