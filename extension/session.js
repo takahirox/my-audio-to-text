@@ -10,7 +10,7 @@ import { SpeakerOutputNode } from '../web/speaker-output.js';
 // recognition; no mutable runtime is shared with another Live/Web session.
 export class TabSession {
   constructor(render, {
-    onSourceEnded, onFloatingDisplay, onTranslationRequestError,
+    onSourceEnded, onFloatingDisplay, onRuntimeNodeError, onTranslationRequestError,
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url)), { type: 'module' }),
     sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
@@ -20,6 +20,7 @@ export class TabSession {
   } = {}) {
     this.onSourceEnded = onSourceEnded;
     this.onFloatingDisplay = onFloatingDisplay;
+    this.onRuntimeNodeError = onRuntimeNodeError;
     this.onTranslationRequestError = onTranslationRequestError;
     this.prepareModelAssets = prepareModelAssets;
     this.textProcessingWorkerFactory = textProcessingWorkerFactory;
@@ -108,9 +109,14 @@ export class TabSession {
     // Unknown event types are diagnostics by default, including future Nodes.
     // Never infer severity from message text.
     if (event.type !== 'error' && event.severity !== 'error') return;
-    this.nodeErrors.set(id, { message: event.message || 'Operation failed. Start a new session to retry.', cause: event.cause });
-    this.update({ error: [...this.nodeErrors].map(([id, error]) => `${id}: ${error.message}`).join('\n'),
-      modelRecovery: [...this.nodeErrors.keys()].some(id => {
+    const message = event.message || 'Operation failed. Start a new session to retry.';
+    const handled = this.session && this.onRuntimeNodeError?.({ id, message });
+    // Keep the error for deduplication when Pipeline reports the same failure.
+    this.nodeErrors.set(id, { message, cause: event.cause, handled });
+    if (handled) { this.update(); return; }
+    const errors = [...this.nodeErrors].filter(([, error]) => !error.handled);
+    this.update({ error: errors.map(([id, error]) => `${id}: ${error.message}`).join('\n'),
+      modelRecovery: errors.some(([id]) => {
         const node = (this.view.activeGraph || this.graph).nodes.find(node => node.id === id);
         return node && graphModelRequirements({ nodes: [node] }).length > 0;
       }) });

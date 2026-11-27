@@ -48,6 +48,10 @@ async function start(owner, target, entry) {
     // The coordinator captured this validated graph at the explicit Start.
     // Revalidate the detached snapshot without rereading a later library edit.
     const { graph: snapshot, fieldNodes, displayNodes } = webVoicePaths(entry.graph);
+    const previewNotice = (id, message) => {
+      owner.notice = `Preview · ${id}: ${message}`;
+      return true;
+    };
     owner.pcm = new WebVoicePCM();
     owner.session = new TabSession(view => {
       if (owner.ending) return;
@@ -59,11 +63,11 @@ async function start(owner, target, entry) {
     }, { microphoneSourceFactory: audio => owner.pcm.source(audio), graph: snapshot, graphId: entry.id, graphName: entry.name,
       pageConnectionFactory: (target, onEvent) => new PageConnection(target, onEvent,
         chrome.runtime.connect({ name: `web-voice-output:${owner.token}` })),
+      onRuntimeNodeError: ({ id, message }) => displayNodes.has(id) && !fieldNodes.has(id) && previewNotice(id, message),
       onTranslationRequestError: ({ id, message, provisional }) => {
         // A shared translator has independent provisional and committed jobs.
         if (!displayNodes.has(id) || (!provisional && fieldNodes.has(id))) return false;
-        owner.notice = `Preview · ${id}: ${message}`;
-        return true;
+        return previewNotice(id, message);
       },
       onFloatingDisplay: text => {
         if (!owner.ending && owner.floatingText !== text) {

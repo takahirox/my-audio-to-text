@@ -36,7 +36,7 @@ const test = base.extend({
         // Insertion assertions recognize one utterance, regardless of Chromium's fake
         // microphone tone/silence cycle or how long placement checks take.
         const singleUtterance = /^(active recording stays|closed-shadow modal|stacked modal dialogs)/.test(info.title);
-        const options = /^Floating Display (shows|translation failure)/.test(info.title) ? { partial: null } : {};
+        const options = /^Floating Display (shows|translation failure|text processing)/.test(info.title) ? { partial: null } : {};
         for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture(options));
       }
       if (info.title.includes('transport measurements')) {
@@ -1010,6 +1010,46 @@ test('Floating Display shows the page session’s latest text and clears while f
     expect(await snapshot()).toBe('');
     await toolbarVoice(t, false); await idle(t);
     await expect(widget(t.website)).toHaveCount(0);
+  } finally { await r.detach(); }
+});
+
+test('Floating Display text processing rejects an empty preview while final insertion continues', async ({ voice: t }) => {
+  test.skip(real);
+  await writeFile(path.join(t.root, 'web/text-summary-worker.js'), `self.onmessage = ({ data }) => {
+    if (data.type === 'load') postMessage({ type: 'ready', id: data.id });
+    if (data.type === 'process') postMessage({ type: 'result', id: data.id, result: 'processed ' + data.inputs[0] });
+  };`);
+  await t.library.evaluate(async id => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge } = await import('./graph.js');
+    const { revision, graph } = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    graph.nodes.push(graphNode('TextProcessingLfm2', 'processor'), graphNode('FloatingDisplay', 'preview'));
+    graph.edges.push(edge('asr', 'provisional', 'processor', 'input1'), edge('processor', 'result', 'preview', 'text'));
+    await new GraphLibrary(localStorage).save(id, revision, graph);
+  }, t.graphId);
+  await enable(t);
+  await start(t); await recording(t);
+  const r = await runtime(t);
+  try {
+    const emit = (type, id, text) => r.evaluate(message => {
+      voiceResources.workers.find(worker => !worker.released && worker.url.endsWith('moonshine-small-ja-worker.js')).postMessage(message);
+    }, { type, id, text });
+    const field = t.website.locator('#first');
+    await emit('fixture-partial', 0, 'first hypothesis');
+    await expect.poll(async () => (await inspectControl(t)).preview.text).toBe('processed first hypothesis');
+    await expect(field).toHaveValue('before after');
+
+    // The ASR clears the provisional input as it delivers this final.
+    await emit('fixture-final', 0, 'first ');
+    await expect(field).toHaveValue('before first after');
+    await expect.poll(async () => (await inspectControl(t)).status).toMatch(/^Preview · processor: .*Text processing needs nonempty combined input/);
+    await recording(t);
+    expect(await inspectControl(t)).toMatchObject({ icon: 'stop', disabled: false });
+    await emit('fixture-final', 1, 'second ');
+    await expect(field).toHaveValue('before first second after');
+    await expect(field).toBeFocused();
+    await stop(t); await idle(t);
+    expect((await inspectControl(t)).preview.text).toBe('');
   } finally { await r.detach(); }
 });
 
