@@ -6,12 +6,12 @@ export const FOCUSED_OUTPUT = 'FocusedInputTextOutputNode';
 
 export const desktopNodeTypes = Object.freeze({
   [MICROPHONE]: { ...NODE_TYPES[MICROPHONE], help: 'Captures the default system microphone after an intentional Start.' },
-  [JAPANESE_ASR]: { ...NODE_TYPES[JAPANESE_ASR], help: 'Prepare the Japanese model in Models. Connect final for committed text or provisional for a Live preview.' },
+  [JAPANESE_ASR]: { ...NODE_TYPES[JAPANESE_ASR], help: 'Prepare the Japanese model in Models. Connect final for committed text or provisional for streaming hypotheses.' },
   TextFormatter: NODE_TYPES.TextFormatter,
   Text: NODE_TYPES.Text,
   Display: NODE_TYPES.Display,
   [FOCUSED_OUTPUT]: { ...NODE_TYPES[FOCUSED_OUTPUT], label: 'Focused application text output',
-    help: 'Send committed TEXT to the field focused at delivery. Use the global shortcut or tray to start.' },
+    help: 'Insert each nonempty TEXT delivery into the field focused at delivery. The default graph connects ASR final. Use the global shortcut or tray to start.' },
 });
 
 export function defaultDesktopGraph() {

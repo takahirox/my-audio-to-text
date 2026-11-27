@@ -472,7 +472,7 @@ test('packaged app skips unsupported Chromium targets and follows focus back to 
   assert.equal((await view()).session.error, '');
 });
 
-test('committed text waits for the Stop shortcut grab and follows the current GTK field', { timeout: 60000 }, async t => {
+test('authorized focused TEXT waits for the Stop shortcut grab and follows the current GTK field', { timeout: 60000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'desktop-stop-shortcut-'));
   t.after(() => rm(dir, { recursive: true, force: true, maxRetries: 10 }));
   const { app, page, view, phase, show } = await launch(t);
@@ -481,7 +481,7 @@ test('committed text waits for the Stop shortcut grab and follows the current GT
   await importGraph(page, 'Stop fixture', literalGraph('{1}', FOCUSED_OUTPUT, ''));
   await selectGraph(page, 'Stop fixture');
   const runtime = app.windows().find(window => window.url().endsWith('/runtime.html'));
-  // Deliver a deterministic final through the real runtime-to-host IPC while
+  // Deliver focused TEXT through the real runtime-to-host IPC while
   // the native shortcut holds the keyboard grab.
   await runtime.evaluate(() => {
     window.runtimeHost.onCommand(({ action, args }) => {
@@ -489,13 +489,13 @@ test('committed text waits for the Stop shortcut grab and follows the current GT
     });
   });
 
-  const committed = '東京🙂';
+  const text = '東京🙂';
   const queued = () => runtime.evaluate(text => {
     window.testInsertResult = null;
     window.testInsert = window.runtimeHost.insert(window.testSession, text).then(
       () => ({ inserted: true }), error => ({ inserted: false, error: error.message }),
     ).then(result => { window.testInsertResult = result; return result; });
-  }, committed);
+  }, text);
   const initial = ['', 'left|right'];
   await trigger(native.id);
   await phase('running');
@@ -518,7 +518,7 @@ test('committed text waits for the Stop shortcut grab and follows the current GT
   await eventually(() => {
     assert.deepEqual(native.get().values, afterStop);
     return true;
-  }, 'Stop did not insert exactly one committed chunk');
+  }, 'Stop did not insert exactly one TEXT delivery');
   assert.equal(native.get().focus, 1);
   assert.equal(x('getwindowfocus'), native.id);
 
@@ -538,8 +538,8 @@ test('committed text waits for the Stop shortcut grab and follows the current GT
   await phase('idle');
   assert.deepEqual(await runtime.evaluate(() => window.testInsert), { inserted: true });
   assert.equal((await view()).session.error, '');
-  await eventually(() => native.get().values[0] === committed, 'Stop did not drain into the newly focused tab');
-  assert.deepEqual(native.get().values, [committed, afterStop[1]]);
+  await eventually(() => native.get().values[0] === text, 'Stop did not drain into the newly focused tab');
+  assert.deepEqual(native.get().values, [text, afterStop[1]]);
 });
 
 test('Models can retry cache inspection and preparation after the packaged runtime crashes', { timeout: 60000 }, async t => {
