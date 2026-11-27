@@ -149,7 +149,11 @@ static NSString *permissionFailure(void) {
 }
 
 static BOOL shortcutHeld(void) {
-    return held || (GetCurrentKeyModifiers() & (cmdKey | shiftKey | optionKey | controlKey));
+    // The synthetic Command+V is posted to the session. Wait on hardware
+    // modifiers so flags from that Paste cannot hold up the next one.
+    const CGEventFlags modifiers = kCGEventFlagMaskCommand | kCGEventFlagMaskShift |
+        kCGEventFlagMaskAlternate | kCGEventFlagMaskControl;
+    return held || (CGEventSourceFlagsState(kCGEventSourceStateHIDSystemState) & modifiers);
 }
 
 static void notifyWriteWaiting(CFAbsoluteTime now) {
