@@ -5,7 +5,6 @@ import { dirname, extname, join, resolve, sep } from 'node:path';
 import { DesktopLibrary } from './library.js';
 import { planGraph } from './graph.js';
 import { exportDraft } from '../extension/graph-library.js';
-import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { audioToWav } from '../web/synthesized-audio.js';
 import { desktopModels } from './models.js';
 import { fetchPinnedModelAsset } from './model-transport.js';
@@ -50,7 +49,8 @@ function send(window, channel, value) {
 }
 
 function view() {
-  return { library: library.value, session: controller.state, shortcutError, models: Object.fromEntries(modelViews), modelOperation: modelActivity(),
+  const session = { ...controller.state, modelKeys: controller.current?.plan.modelKeys || [] };
+  return { library: library.value, session, shortcutError, models: Object.fromEntries(modelViews), modelOperation: modelActivity(),
     platform: process.platform, items: [...displayItems.values()],
     nodeStatus: [...(controller.current?.status.values() || [])], preparation: controller.current?.preparation };
 }
@@ -251,7 +251,7 @@ async function run(action, ...args) {
   if (action === 'start' && (controller.current?.id !== args[0] || controller.state.phase !== 'preparing')) return;
   const request = ++runtimeSequence;
   const download = action === 'start' ? {
-    controller: new AbortController(), sources: sourcesFor(graphModelRequirements(args[1]).map(model => model.key)),
+    controller: new AbortController(), sources: sourcesFor(controller.current.plan.modelKeys),
   } : null;
   if (download) graphDownload = download;
   const timeout = ['start', 'modelPrepare'].includes(action) ? 3_600_000 : action === 'press' ? 300_000 : 180_000;

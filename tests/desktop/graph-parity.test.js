@@ -253,6 +253,100 @@ test('packaged desktop delivers deterministic inference through Live Display, Au
   });
 });
 
+const mediumAsr = {
+  key: 'moonshine-medium-en', worker: 'moonshine-medium', manifest: 'moonshine-medium-en',
+  script: moonshineWorkerFixture(), graph: modelGraph('SpeechToTextMoonshineMediumEn'),
+};
+
+test('packaged desktop reports a failed ASR branch and keeps an independent focused action running', {
+  timeout: 30000,
+}, async t => {
+  const { app, page, runtime } = await launch(t);
+  await prepareInferenceFixtures(app, runtime, [mediumAsr]);
+  await runtime.evaluate(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      constructor(url, options) {
+        super(url, options);
+        if (url.pathname.endsWith('/moonshine-medium-worker.js')) window.mediumWorker = this;
+      }
+    };
+  });
+  await app.evaluate(({ app }) => {
+    const { createRequire } = process.getBuiltinModule('node:module');
+    const { FocusedTarget } = createRequire(`${app.getAppPath()}/package.json`)('./desktop/focused-target.js');
+    const request = FocusedTarget.prototype.request;
+    globalThis.testInsertions = [];
+    FocusedTarget.prototype.request = function (action, token, text) {
+      if (action === 'shortcut-context') globalThis.releaseTestShortcut = shortcut => this.onShortcut(shortcut, text);
+      if (action === 'insert') globalThis.testInsertions.push(text);
+      if (['authorize', 'insert', 'release'].includes(action)) return Promise.resolve();
+      return request.call(this, action, token, text);
+    };
+  });
+  const mixed = graph([...mediumAsr.graph.nodes,
+    spec('Text', 'phrase', { value: 'Independent text' }), spec('Button', 'action', { label: 'Insert text' }),
+    spec('Hold', 'hold'), spec('FocusedInputTextOutputNode', 'focused'),
+  ], [...mediumAsr.graph.edges,
+    edge('phrase', 'value', 'hold', 'input'), edge('action', 'trigger', 'hold', 'trigger'),
+    edge('hold', 'value', 'focused', 'text'),
+  ]);
+  const shortcut = 'Control+Alt+Shift+F8';
+  await page.evaluate(async ({ mixed, shortcut }) => {
+    const entry = await window.desktop.add('Mixed dictation and action', mixed);
+    await window.desktop.select(entry.id);
+    await window.desktop.shortcut(shortcut);
+  }, { mixed, shortcut });
+  await page.getByRole('button', { name: 'Live', exact: true }).click();
+  await app.evaluate((_electron, shortcut) => globalThis.releaseTestShortcut(shortcut), shortcut);
+  await phase(page, 'running');
+  const action = page.getByRole('button', { name: 'Insert text' });
+  await expect(action).toBeEnabled();
+
+  await runtime.evaluate(() => window.mediumWorker.postMessage({ type: 'fixture-error' }));
+  await expect(page.locator('#node-status [data-severity="error"]')).toHaveText(/model · .*Controlled worker failure/);
+  assert.equal((await get(page)).session.phase, 'running');
+  await action.click();
+  await expect.poll(() => app.evaluate(() => globalThis.testInsertions)).toEqual(['Independent text']);
+  await expect(page.locator('#live-models')).toContainText('Moonshine Medium');
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await phase(page, 'idle');
+  assert.equal((await get(page)).session.error, '');
+});
+
+test('packaged Live shows models for the executable graph and retains them across a save during recording', {
+  timeout: 30000,
+}, async t => {
+  const { app, page, runtime } = await launch(t);
+  await prepareInferenceFixtures(app, runtime, [mediumAsr]);
+  const entry = await addLive(page, 'Editable Live graph', mediumAsr.graph);
+  const badges = page.locator('#live-models button');
+  await expect(badges).toHaveText([/Moonshine Medium/]);
+  const start = page.getByRole('button', { name: 'Start', exact: true });
+  const stop = page.getByRole('button', { name: 'Stop', exact: true });
+  await start.click();
+  await phase(page, 'running');
+
+  const replacement = graph([
+    spec('Text', 'source', { value: 'Saved text' }), spec('Display', 'output'), spec('SpeechToTextMoonshineSmallJa', 'parked'),
+  ], [
+    edge('source', 'value', 'output', 'input1'),
+  ]);
+  await page.evaluate(({ entry, replacement }) => window.desktop.save(entry.id, entry.revision, replacement), { entry, replacement });
+  await expect(badges).toHaveText([/Moonshine Medium.*Ready/]);
+  await expect(page.locator('#live-state')).toHaveText('Recording');
+  await stop.click();
+  await phase(page, 'idle');
+  await expect(page.locator('#live-models')).toBeHidden();
+
+  await start.click();
+  await phase(page, 'running');
+  await expect(page.getByRole('tabpanel')).toContainText('Saved text');
+  await expect(page.locator('#live-models')).toBeHidden();
+  await stop.click();
+  await phase(page, 'idle');
+});
+
 test('packaged model preparation rejects foreign requests, cancels, retries and detects corrupt pinned bytes', {
   timeout: 45000,
 }, async t => {

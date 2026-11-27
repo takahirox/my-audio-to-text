@@ -84,10 +84,7 @@ async function start(id, graph) {
         if (runtime.audioSources.has(node) || graph.nodes.some(spec => spec.id === node && spec.type === FOCUSED_OUTPUT)) fail(error.message);
         else { status(node, error.message, 'error'); owner.publishActions?.(); }
       },
-      onSpeechEvent(event, node) {
-        onEvent(event, node);
-        if (event.type === 'error' && owner.pipeline?.state === 'running' && graph.nodes.some(spec => spec.type === FOCUSED_OUTPUT)) fail(event.message);
-      },
+      onSpeechEvent: onEvent,
       onTextProcessingEvent: onEvent,
       onIfConditionEvent: onEvent,
       onTtsState: (message, node, event) => onEvent({ ...event, message }, node),

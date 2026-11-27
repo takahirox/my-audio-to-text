@@ -12,6 +12,7 @@ const element = id => document.getElementById(id);
 const sections = [...document.querySelectorAll('main > section')];
 const nav = [...document.querySelectorAll('nav [data-page]')];
 const displays = new Map(), audioPlayers = new Map(), modelViews = new Map(), statusRows = new Map();
+const liveModelKeys = new Map();
 let modelOperation, sessionId, licenseTicket = 0;
 let current, currentPage, editor, draft, editorId, lastLibrary, lastDisplaySpecs, actionError = '';
 
@@ -107,6 +108,7 @@ function renderLibrary(library) {
   const active = document.activeElement?.dataset;
   graphs.replaceChildren();
   picker.replaceChildren();
+  liveModelKeys.clear();
   for (const entry of library.graphs) {
     const row = document.createElement('article');
     row.className = 'panel graph-entry';
@@ -139,8 +141,9 @@ function renderLibrary(library) {
     graphs.append(row);
     try {
       if (entry.kind === 'subgraph') continue;
-      planGraph(entry.graph, 'live', library.graphs);
+      const { modelKeys } = planGraph(entry.graph, 'live', library.graphs);
       picker.add(new Option(entry.name, entry.id));
+      liveModelKeys.set(entry.id, modelKeys);
     } catch { /* Keep drafts and graphs requiring a native caret in the library. */ }
   }
   if (Array.from(picker.options).some(option => option.value === previous)) picker.value = previous;
@@ -216,20 +219,22 @@ async function inspectModel() {
 
 function renderGraphModels() {
   if (!current) return;
-  for (const [id, graph] of [
-    ['editor-models', editor?.saved],
-    ['live-models', current.library.graphs.find(entry => entry.id === element('live-graph').value)?.graph],
+  let editorKeys = [];
+  if (editor) try {
+    editorKeys = graphModelRequirements(resolveSubgraphs(editor.saved, current.library.graphs)).map(({ key }) => key);
+  } catch { /* Graph validation presents the structural error. */ }
+  const liveKeys = current.session.phase === 'idle' ? liveModelKeys.get(element('live-graph').value) || [] : current.session.modelKeys;
+  for (const [id, keys] of [
+    ['editor-models', editorKeys],
+    ['live-models', liveKeys],
   ]) {
     const container = element(id);
-    let requirements = [];
-    if (graph) try { requirements = graphModelRequirements(resolveSubgraphs(graph, current.library.graphs)); }
-    catch { /* Graph validation presents the structural error. */ }
-    const signature = JSON.stringify(requirements.map(({ key }) => [key, modelViews.get(key)?.state]));
+    const signature = JSON.stringify(keys.map(key => [key, modelViews.get(key)?.state]));
     if (signature === container.dataset.models) continue;
     container.dataset.models = signature;
-    container.hidden = !requirements.length;
-    container.replaceChildren(...requirements.map(({ key, title }) => {
-      const label = desktopModels.find(model => model.key === key)?.title || title;
+    container.hidden = !keys.length;
+    container.replaceChildren(...keys.map(key => {
+      const label = desktopModels.find(model => model.key === key)?.title || key;
       const state = modelViews.get(key)?.state;
       return button(state ? `${label} · ${state}` : label, () => {
         modelPicker.value = key;

@@ -1,4 +1,5 @@
 import { assertGraph, edge, executableGraph, graphNode, GRAPH_VERSION, NODE_TYPES } from '../extension/graph.js';
+import { graphModelRequirements } from '../extension/graph-model-preparation.js';
 import { assertSubgraph, resolveSubgraphs } from '../extension/subgraphs.js';
 import { buttonLabel } from '../web/button-node.js';
 
@@ -64,5 +65,6 @@ export function planGraph(value, mode, definitions = []) {
   if (!graph.nodes.length) throw Error('No executable path. Connect a source through complete processors to an output destination.');
   const displays = byType('Display').map(({ id, settings }) => ({ id, settings }));
   const actions = byType('Button').map(({ id, settings }) => ({ id, label: buttonLabel(settings.label) }));
-  return { graph, microphone, focused, displays, actions };
+  const modelKeys = graphModelRequirements(graph).map(({ key }) => key);
+  return { graph, microphone, focused, displays, actions, modelKeys };
 }
