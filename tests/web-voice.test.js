@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { webVoiceGraph, webVoiceError, webVoiceChoices, webVoiceDefault } from '../extension/web-voice-graph.js';
 import { voiceEnabled, voicePosition } from '../extension/web-voice-preference.js';
-import { graphNode, edge, defaultGraph } from '../extension/graph.js';
+import { assertGraph, graphNode, edge, defaultGraph } from '../extension/graph.js';
 
 function voice() {
   return { version: 15, nodes: [graphNode('MicrophoneAudio', 'mic'), graphNode('SpeechToTextMoonshineSmallJa', 'asr'), graphNode('FocusedInputTextOutputNode', 'field')],
@@ -43,6 +43,22 @@ test('provisional, cumulative, startup text, duplicate field sinks and incomplet
   const duplicate = voice(); duplicate.nodes.push(graphNode('FocusedInputTextOutputNode', 'second')); duplicate.edges.push(edge('asr', 'final', 'second', 'text')); assert.match(webVoiceError(duplicate), /one executable/);
   const incomplete = voice(); incomplete.nodes.push(graphNode('IfCondition', 'gate'));
   incomplete.edges[1] = edge('gate', 'yes', 'field', 'text'); assert.ok(webVoiceError(incomplete));
+});
+
+test('floating preview includes complete ancestors without applying the field path restrictions', () => {
+  const graph = voice();
+  graph.nodes.push(graphNode('Text', 'constant'), graphNode('TextFormatter', 'format'), graphNode('FloatingDisplay', 'preview'),
+    graphNode('FloatingDisplay', 'unwired'), graphNode('Display', 'live'), graphNode('Supertonic3', 'tts'), graphNode('SpeakerOutput', 'speaker'));
+  graph.edges.push(edge('asr', 'provisional', 'format', 'input1'), edge('constant', 'value', 'format', 'input2'),
+    edge('format', 'text', 'preview', 'text'), edge('asr', 'final', 'live', 'input1'), edge('asr', 'final', 'tts', 'text'),
+    edge('tts', 'audio', 'speaker', 'audio'));
+  const saved = assertGraph(JSON.parse(JSON.stringify(graph)));
+  assert.deepEqual(saved, graph);
+  const runtime = webVoiceGraph(saved);
+  assert.deepEqual(runtime.nodes.map(node => node.id), ['mic', 'asr', 'field', 'constant', 'format', 'preview']);
+  assert.deepEqual(runtime.edges, graph.edges.slice(0, 5));
+  saved.edges[1] = edge('format', 'text', 'field', 'text');
+  assert.match(webVoiceError(saved), /committed/);
 });
 
 test('existing ASRs, translation, formatting, batching and summary processors retain typed graph flexibility', () => {

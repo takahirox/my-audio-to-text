@@ -122,13 +122,26 @@ test('one authenticated offscreen host multiplexes independent documents and rej
   output.onMessage.emit({ request: 1, action: 'append', capability: sa.target.capability, text: 'hello' });
   assert.equal(f.relays[0].port.sent[0].text, 'hello');
   f.relays[0].port.onMessage.emit({ request: 1, result: true }); assert.equal(output.sent[0].result, true);
+  const floating = (owner, text) => host.onMessage.emit({ type: 'floating-display', token: owner.token, text });
+  floating(sa, 'first tab');
+  assert.equal(a.sent.at(-1).text, 'first tab');
+  assert.equal(a.sent.at(-1).capability, sa.target.capability);
+  assert.equal(b.sent.at(-1).type, 'graphs');
   a.onMessage.emit({ type: 'stop' }); assert.equal(host.sent.at(-1).token, sa.token); assert.equal(host.sent.at(-1).type, 'stop');
+  floating(sa, 'while stopping');
+  assert.equal(a.sent.at(-1).state, 'stopping');
   host.onMessage.emit({ type: 'ended', token: sa.token }); await turn();
   assert.equal(f.closed(), 0); assert.equal(output.disconnected, true);
   host.onMessage.emit({ type: 'state', token: sb.token, state: 'recording' }); assert.equal(b.sent.at(-1).state, 'recording');
   await f.start(a); const replacement = host.sent.at(-1);
   host.onMessage.emit({ type: 'ended', token: sa.token, error: 'late error' });
   assert.equal(host.sent.at(-1), replacement); assert.equal(replacement.type, 'initialize');
+  const last = a.sent.at(-1);
+  floating(sa, 'late preview');
+  assert.equal(a.sent.at(-1), last);
+  floating(sb, '');
+  assert.equal(b.sent.at(-1).type, 'floating-display');
+  assert.equal(b.sent.at(-1).text, '');
 });
 
 for (const reason of ['navigation', 'tab close', 'disconnect', 'worker failure', 'cancel', 'output disconnect']) test(`${reason} ends only its Web document`, async t => {

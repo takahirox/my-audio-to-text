@@ -752,6 +752,50 @@ test('macOS Live Cancel clears unfinished text, keeps committed text, and ignore
   assert.deepEqual((await view()).items.map(({ item }) => item), [[]]);
 });
 
+test('macOS Floating Display renders inert snapshots in the inactive indicator and clears on Stop and Cancel', {
+  timeout: 45000,
+}, async t => {
+  const { desktop, management, view } = await launch(t);
+  const emit = await textProducer(desktop);
+  const id = await management.evaluate(async graph => (await window.desktop.add('Floating preview', graph)).id,
+    testGraph('FloatingDisplay', ''));
+  const start = async () => {
+    await management.evaluate(id => window.desktop.startLive(id), id);
+    await eventually(async () => (await view()).session.phase === 'running', 'Live did not start');
+  };
+  const indicator = await eventually(() => desktop.windows().find(page => page.url().endsWith('/indicator.html')),
+    'The packaged indicator did not load');
+  const preview = indicator.locator('#floating-text');
+  await start();
+  await preview.waitFor({ state: 'hidden' });
+  await emit('first hypothesis');
+  await preview.getByText('first hypothesis', { exact: true }).waitFor();
+  await emit('<b>東京🙂</b>');
+  await preview.getByText('<b>東京🙂</b>', { exact: true }).waitFor();
+  assert.equal(await preview.locator('b').count(), 0);
+  assert.deepEqual(await desktop.evaluate(({ BrowserWindow }) => {
+    const indicator = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().endsWith('/indicator.html'));
+    return { visible: indicator.isVisible(), focused: indicator.isFocused() };
+  }), { visible: true, focused: false });
+  assert.deepEqual((await view()).items, []);
+  await emit('');
+  await preview.waitFor({ state: 'hidden' });
+  await emit('before Stop');
+  await preview.getByText('before Stop', { exact: true }).waitFor();
+  await indicator.getByRole('button', { name: 'Stop' }).click();
+  assert.equal((await idle(view)).error, '');
+  await preview.waitFor({ state: 'hidden' });
+
+  await start();
+  assert.equal(await preview.textContent(), '');
+  await emit('before Cancel');
+  await preview.getByText('before Cancel', { exact: true }).waitFor();
+  await management.evaluate(() => window.desktop.cancel());
+  assert.equal((await idle(view)).error, '');
+  await preview.waitFor({ state: 'hidden' });
+  assert.equal(await preview.textContent(), '');
+});
+
 test('macOS package reopens an invalid Auto Save draft for repair or Undo', {
   timeout: 60000,
 }, async t => {

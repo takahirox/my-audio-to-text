@@ -59,6 +59,12 @@ async function start(owner, target, entry) {
     }, { microphoneSourceFactory: audio => owner.pcm.source(audio), graph: snapshot, graphId: entry.id, graphName: entry.name,
       pageConnectionFactory: (target, onEvent) => new PageConnection(target, onEvent,
         chrome.runtime.connect({ name: `web-voice-output:${owner.token}` })),
+      onFloatingDisplay: text => {
+        if (!owner.ending && owner.floatingText !== text) {
+          owner.floatingText = text;
+          send(owner, { type: 'floating-display', text });
+        }
+      },
       onSourceEnded: () => { void finish(owner, true, 'Microphone ended or permission was removed. Click the mic to start a new session.'); } });
     owner.session.outputTarget = structuredClone(target);
     // Automatic download is a Live-window fallback. Web dictation keeps its
@@ -97,7 +103,7 @@ port.onMessage.addListener(message => {
   }
   if (message.type !== 'initialize' || owner || disconnected) return;
   if (message.stopRequested) { send({ token: message.token }, { type: 'ended' }); return; }
-  const next = { token: message.token, state: 'preparing' };
+  const next = { token: message.token, state: 'preparing', floatingText: '' };
   owners.set(next.token, next);
   void start(next, message.target, message.graph);
 });

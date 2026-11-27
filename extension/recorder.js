@@ -9,6 +9,7 @@ const sessionId = params.get('session') || crypto.randomUUID();
 let selectedGraphId = params.get('graph');
 const readWindowGraph = () => readSelectedGraph(localStorage, selectedGraphId);
 const element = id => document.getElementById(id);
+const floatingText = element('floating-text');
 const stateChannel = new BroadcastChannel('live-graph-state');
 function renderDiagnostics(view) {
   for (const [id, text] of [['signal', view.signal], ['translation-status', view.translationStatus], ['processing-status', view.processingStatus], ['condition-status', view.conditionStatus], ['hold-status', view.holdStatus], ['tts-status', view.ttsStatus], ['speaker-status', view.speakerStatus], ['output-status', view.outputStatus]]) {
@@ -90,10 +91,12 @@ const session = new TabSession(view => {
   const current = view.state !== 'idle' ? view.activeGraph : view.savedGraph;
   const nextGraph = executableGraph(view.savedGraph);
   const running = view.state !== 'idle';
+  if (!running || view.state === 'stopping') floatingText.textContent = '';
   const pending = running && (view.activeGraphId !== view.savedGraphId || graphExecutionFingerprint(view.activeSavedGraph) !== graphExecutionFingerprint(view.savedGraph) || view.activeGraphName !== view.savedGraphName);
   element('saved-state').textContent = pending ? `Next session: ${view.savedGraphName}. This session keeps ${view.activeGraphName}; changes apply on Start.` : '';
   renderTextRegions(element('live-displays'), view.activeGraph || nextGraph, view.displays);
-  element('no-live-displays').hidden = !!element('live-displays').children.length;
+  element('no-live-displays').hidden = !!element('live-displays').children.length ||
+    (running ? current : nextGraph).nodes.some(node => node.type === 'FloatingDisplay');
   const hasSpeaker = current.nodes.some(node => node.type === 'SpeakerOutput');
   element('speaker-hint').hidden = !hasSpeaker;
   element('enable-speaker').hidden = !view.speakerNeedsActivation;
@@ -104,7 +107,9 @@ const session = new TabSession(view => {
   element('stop').disabled = view.modelState !== 'preparing' && !['loading', 'starting', 'running'].includes(view.state);
   const nextState = JSON.stringify(graphState(view));
   if (!closed && nextState !== publishedState) { publishedState = nextState; stateChannel.postMessage(graphState(view)); }
-}, { graph, graphId: graphContext.id, graphName: graphContext.name, onSynthesizedAudio: (audio, signal) => {
+}, { graph, graphId: graphContext.id, graphName: graphContext.name, onFloatingDisplay: text => {
+  if (floatingText.textContent !== text) floatingText.textContent = text;
+}, onSynthesizedAudio: (audio, signal) => {
   if (signal.aborted) return;
   const url = URL.createObjectURL(audioToWav(audio)); audioURLs.add(url);
   const row = document.createElement('li'), player = document.createElement('audio'), link = document.createElement('a');

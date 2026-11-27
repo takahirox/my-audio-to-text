@@ -10,7 +10,7 @@ import { SpeakerOutputNode } from '../web/speaker-output.js';
 // recognition; no mutable runtime is shared with another Live/Web session.
 export class TabSession {
   constructor(render, {
-    onSourceEnded,
+    onSourceEnded, onFloatingDisplay,
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url)), { type: 'module' }),
     sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
@@ -19,6 +19,7 @@ export class TabSession {
     prepareModelAssets = prepareGraphModelAssets,
   } = {}) {
     this.onSourceEnded = onSourceEnded;
+    this.onFloatingDisplay = onFloatingDisplay;
     this.prepareModelAssets = prepareModelAssets;
     this.textProcessingWorkerFactory = textProcessingWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
@@ -237,7 +238,7 @@ export class TabSession {
   ownsRuntime(owner) { return this.session === owner || this.prepared === owner; }
   createRuntime(session, snapshot) {
     const graph = executableGraph(snapshot);
-    const hasDisplay = graph.nodes.some(node => node.type === 'Display');
+    const hasDisplay = graph.nodes.some(node => ['Display', 'FloatingDisplay'].includes(node.type));
     const hasAudioOutput = graph.nodes.some(node => ['AudioOutput', 'SpeakerOutput'].includes(node.type));
     Object.assign(session, buildGraph(snapshot, {
         preload: this.livePreparation,
@@ -305,6 +306,9 @@ export class TabSession {
         },
         onDisplay: (id, state, port) => {
           if (this.ownsRuntime(session) || (!this.session && this.canceling === session)) this.update({ displays: { ...this.view.displays, [id]: { ...this.view.displays[id], [port]: state } } });
+        },
+        onFloatingDisplay: text => {
+          if (this.session === session && this.view.state !== 'stopping') this.onFloatingDisplay?.(text);
         },
         onCapturedAudio: (pcm, id) => {
           if (!this.ownsRuntime(session)) return;

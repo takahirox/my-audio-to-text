@@ -14,7 +14,7 @@ test('every built-in has an explicit Add Node category; new types must be classi
     'AI Models / Text': ['IfCondition', 'TextProcessingLfm2', 'TextProcessingQwen35'],
     'AI Models / Speech Synthesis': ['CosyVoice3Streaming', 'Kokoro', 'Qwen3TtsStreaming', 'Supertonic3'],
     'Processors': ['Hold', 'KeyedPairedTextAccumulator', 'KeyedTextCoalesce', 'KeyedTextPair', 'TextAccumulator', 'TextFormatter', 'TextSlidingWindow', 'TextWindow'],
-    'Outputs': ['AudioOutput', 'Display', 'FocusedInputTextOutputNode', 'SpeakerOutput'],
+    'Outputs': ['AudioOutput', 'Display', 'FloatingDisplay', 'FocusedInputTextOutputNode', 'SpeakerOutput'],
     'Subgraphs': [],
   };
   assert.deepEqual(PALETTE_CATEGORIES, Object.keys(expected));
