@@ -2,7 +2,7 @@ import { assertGraph, executableGraph, ASR_TYPES } from './graph.js';
 import { resolveSubgraphs } from './subgraphs.js';
 
 // Run the field and floating displays with their complete ancestors.
-export function webVoiceGraph(value) {
+export function webVoicePaths(value) {
   const graph = executableGraph(assertGraph(value));
   if (graph.nodes.some(n => n.type === 'ChromeTabAudio')) throw Error('Web voice typing cannot run tab capture. Use a microphone-only graph.');
   const sinks = graph.nodes.filter(n => n.type === 'FocusedInputTextOutputNode');
@@ -43,8 +43,13 @@ export function webVoiceGraph(value) {
   if (!reachable.has(sinks[0].id)) throw Error('The field output needs a complete typed path from MicrophoneAudio. No Live graph is substituted.');
   if (graph.nodes.some(n => displays.has(n.id) && n.type === 'Button')) throw Error('Button actions on a Floating Display path require Live.');
   const included = id => field.has(id) || displays.has(id);
-  return { ...graph, nodes: graph.nodes.filter(n => included(n.id)), edges: graph.edges.filter(e => included(e.to[0])) };
+  return {
+    graph: { ...graph, nodes: graph.nodes.filter(n => included(n.id)), edges: graph.edges.filter(e => included(e.to[0])) },
+    fieldNodes: field,
+    displayNodes: displays,
+  };
 }
+export function webVoiceGraph(value) { return webVoicePaths(value).graph; }
 export function webVoiceError(value) { try { webVoiceGraph(value); return ''; } catch (error) { return error.message; } }
 
 // Keep selection and execution on precisely the same validation boundary.

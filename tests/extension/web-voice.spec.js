@@ -36,7 +36,7 @@ const test = base.extend({
         // Insertion assertions recognize one utterance, regardless of Chromium's fake
         // microphone tone/silence cycle or how long placement checks take.
         const singleUtterance = /^(active recording stays|closed-shadow modal|stacked modal dialogs)/.test(info.title);
-        const options = info.title.startsWith('Floating Display shows') ? { partial: null } : {};
+        const options = /^Floating Display (shows|translation failure)/.test(info.title) ? { partial: null } : {};
         for (const role of ['moonshine-small-ja', 'moonshine-medium']) await writeFile(path.join(root, `web/${role}-worker.js`), moonshineWorkerFixture(options));
       }
       if (info.title.includes('transport measurements')) {
@@ -99,7 +99,7 @@ const test = base.extend({
         window.Worker = class extends NativeWorker {
           constructor(...args) {
             super(...args);
-            this.released = false; window.voiceResources.workers.push(this);
+            this.url = String(args[0]); this.released = false; window.voiceResources.workers.push(this);
             this.addEventListener('message', ({ data }) => { if (data.type === 'final') { const item = { id: data.id, text: data.text }; window.voiceFinals.push(item); console.debug('voice-test-final:' + JSON.stringify(item)); } });
           }
           postMessage(data, ...rest) {
@@ -1010,6 +1010,58 @@ test('Floating Display shows the page session’s latest text and clears while f
     expect(await snapshot()).toBe('');
     await toolbarVoice(t, false); await idle(t);
     await expect(widget(t.website)).toHaveCount(0);
+  } finally { await r.detach(); }
+});
+
+for (const shared of [false, true]) test(`Floating Display translation failure keeps final insertion active with a ${shared ? 'shared' : 'preview-only'} translator`, async ({ voice: t }) => {
+  test.skip(real);
+  const bytes = Buffer.from('controlled PLaMo weights');
+  await writeFile(path.join(t.root, 'extension/plamo-fixture.bin'), bytes);
+  await writeFile(path.join(t.root, 'extension/plamo-assets.json'), JSON.stringify([{
+    path: 'plamo-3-translate-2b-Q4_K_M.gguf', bytes: bytes.length,
+    sha256Chunks: [createHash('sha256').update(bytes).digest('hex')], sourceURL: t.url + 'plamo-fixture.bin',
+  }]));
+  await writeFile(path.join(t.root, 'web/plamo-worker.js'), `self.onmessage = ({ data }) => {
+    if (data.type === 'load') postMessage({ type: 'ready', id: data.id });
+    if (data.type === 'translate') postMessage(data.text === 'bad preview'
+      ? { type: 'error', id: data.id, message: 'Controlled preview rejection' }
+      : { type: 'result', id: data.id, texts: ['translated ' + data.text] });
+    if (data.type === 'drain') postMessage({ type: 'drained', id: data.id });
+  };`);
+  await t.library.evaluate(async ({ id, shared }) => {
+    const { GraphLibrary, readLibrary } = await import('./graph-library.js');
+    const { graphNode, edge } = await import('./graph.js');
+    const { prepareGraphModelAssets } = await import('./graph-model-preparation.js');
+    const { revision, graph } = readLibrary(localStorage).graphs.find(entry => entry.id === id);
+    graph.nodes.push(graphNode('Plamo3Translate2B', 'translate'), graphNode('FloatingDisplay', 'preview'));
+    graph.edges.push(edge('asr', 'provisional', 'translate', shared ? 'provisional' : 'text'),
+      edge('translate', shared ? 'provisionalText' : 'text', 'preview', 'text'));
+    if (shared) {
+      graph.edges[1] = edge('asr', 'final', 'translate', 'text');
+      graph.edges.push(edge('translate', 'text', 'field', 'text'));
+    }
+    await prepareGraphModelAssets(graph);
+    await new GraphLibrary(localStorage).save(id, revision, graph);
+  }, { id: t.graphId, shared });
+  await enable(t);
+  await start(t); await recording(t);
+  const r = await runtime(t);
+  try {
+    const emit = (type, id, text) => r.evaluate(message => {
+      voiceResources.workers.find(worker => !worker.released && worker.url.endsWith('moonshine-small-ja-worker.js')).postMessage(message);
+    }, { type, id, text });
+    const field = t.website.locator('#first'), prefix = shared ? 'translated ' : '';
+    await emit('fixture-final', 0, 'first ');
+    await expect(field).toHaveValue(`before ${prefix}first after`);
+    await emit('fixture-partial', 1, 'bad preview');
+    await expect.poll(async () => (await inspectControl(t)).status).toContain('Controlled preview rejection');
+    await recording(t);
+    expect(await inspectControl(t)).toMatchObject({ icon: 'stop', disabled: false });
+    await expect(field).toHaveValue(`before ${prefix}first after`);
+    await emit('fixture-final', 1, 'second ');
+    await expect(field).toHaveValue(`before ${prefix}first ${prefix}second after`);
+    await expect(field).toBeFocused();
+    await stop(t); await idle(t);
   } finally { await r.detach(); }
 });
 

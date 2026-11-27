@@ -10,7 +10,7 @@ import { SpeakerOutputNode } from '../web/speaker-output.js';
 // recognition; no mutable runtime is shared with another Live/Web session.
 export class TabSession {
   constructor(render, {
-    onSourceEnded, onFloatingDisplay,
+    onSourceEnded, onFloatingDisplay, onTranslationRequestError,
     workerFactory = path => new Worker(new URL(path, new URL('../web/', import.meta.url)), { type: 'module' }),
     sourceFactory, microphoneSourceFactory, pageConnectionFactory, moonshineWorkerFactory, moonshineJapaneseWorkerFactory, modelLoadTimeoutMs,
     translationWorkerFactory = url => new Worker(url, { type: 'module' }),
@@ -20,6 +20,7 @@ export class TabSession {
   } = {}) {
     this.onSourceEnded = onSourceEnded;
     this.onFloatingDisplay = onFloatingDisplay;
+    this.onTranslationRequestError = onTranslationRequestError;
     this.prepareModelAssets = prepareModelAssets;
     this.textProcessingWorkerFactory = textProcessingWorkerFactory;
     this.ifConditionWorkerFactory = ifConditionWorkerFactory;
@@ -318,9 +319,11 @@ export class TabSession {
           }
         },
         onEnded: id => { if (this.ownsRuntime(session)) void this.sourceEnded(session, id); },
-        onTranslationState: (state, id, severity) => {
+        onTranslationState: (state, id, severity, request) => {
           if (!this.ownsRuntime(session)) return;
-          this.nodeEvent({ severity, message: state }, id);
+          if (!request || !this.onTranslationRequestError?.({ id, message: state, ...request })) {
+            this.nodeEvent({ severity, message: state }, id);
+          }
           session.translationStates ||= {};
           session.translationStates[id] = state;
           const statuses = Object.entries(session.translationStates);

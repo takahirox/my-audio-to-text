@@ -4,7 +4,7 @@ import { TabSession } from './session.js';
 import { PageConnection } from './page-target.js';
 import { readLibrary, LIBRARY_KEY } from './graph-library.js';
 import { launchLibrary } from './launch-library.js';
-import { webVoiceGraph } from './web-voice-graph.js';
+import { webVoicePaths } from './web-voice-graph.js';
 
 // Chrome permits one offscreen document per profile. Only this inert host is
 // shared: every owner has its own graph, models, PCM source and output connection.
@@ -19,7 +19,7 @@ function send(owner, message) {
 }
 function publish(owner, state, error = '') {
   owner.state = state;
-  send(owner, { type: 'state', state, error });
+  send(owner, { type: 'state', state, error, notice: state === 'recording' ? owner.notice || '' : '' });
 }
 async function finish(owner, cancel = false, error = '') {
   if (owner.ending) {
@@ -47,7 +47,7 @@ async function start(owner, target, entry) {
   try {
     // The coordinator captured this validated graph at the explicit Start.
     // Revalidate the detached snapshot without rereading a later library edit.
-    const snapshot = webVoiceGraph(entry.graph);
+    const { graph: snapshot, fieldNodes, displayNodes } = webVoicePaths(entry.graph);
     owner.pcm = new WebVoicePCM();
     owner.session = new TabSession(view => {
       if (owner.ending) return;
@@ -59,6 +59,12 @@ async function start(owner, target, entry) {
     }, { microphoneSourceFactory: audio => owner.pcm.source(audio), graph: snapshot, graphId: entry.id, graphName: entry.name,
       pageConnectionFactory: (target, onEvent) => new PageConnection(target, onEvent,
         chrome.runtime.connect({ name: `web-voice-output:${owner.token}` })),
+      onTranslationRequestError: ({ id, message, provisional }) => {
+        // A shared translator has independent provisional and committed jobs.
+        if (!displayNodes.has(id) || (!provisional && fieldNodes.has(id))) return false;
+        owner.notice = `Preview · ${id}: ${message}`;
+        return true;
+      },
       onFloatingDisplay: text => {
         if (!owner.ending && owner.floatingText !== text) {
           owner.floatingText = text;
