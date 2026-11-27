@@ -72,7 +72,7 @@ function showIndicator() {
   const state = controller.state;
   const text = controller.current?.floatingText ?? '';
   send(indicator, 'indicator:update', { ...state, text });
-  if (state.phase === 'canceling' || (state.phase === 'idle' && !state.error)) {
+  if ((state.phase === 'canceling' && !state.microphone) || (state.phase === 'idle' && !state.error)) {
     indicator?.hide();
     return;
   }
@@ -417,7 +417,9 @@ function bindIPC() {
   handle('runtime', () => runtime, 'runtime:insert', (id, text) => controller.insert(id, text));
   fromRuntime('response', result => pendingCommands.get(result.request)?.(result));
   fromRuntime('failure', (id, message) => { void controller.cancel(String(message).slice(0, 700), id); });
-  fromRuntime('capture-ended', (id, message) => controller.captureEnded(id, typeof message === 'string' ? message.slice(0, 700) : undefined));
+  fromRuntime('capture-state', (id, capturing, message) => {
+    if (typeof capturing === 'boolean') controller.captureState(id, capturing, typeof message === 'string' ? message.slice(0, 700) : undefined);
+  });
   fromRuntime('display', (...args) => controller.display(...args));
   fromRuntime('floating-display', (id, text) => controller.floatingDisplay(id, text));
   fromRuntime('actions', (id, actions) => {

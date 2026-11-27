@@ -236,7 +236,14 @@ function dispatchFixture(t, tool) {
     onLost: () => {},
   });
   const runtime = [];
-  const controller = new DesktopSession({ target, run: async (action, id) => { runtime.push([action, id]); }, onChange: () => {} });
+  const controller = new DesktopSession({
+    target,
+    run: async (action, id) => {
+      runtime.push([action, id]);
+      controller.captureState(id, action === 'start');
+    },
+    onChange: () => {},
+  });
   const lines = createInterface({ input: target.connect().process.stdout });
   t.after(() => {
     lines.close();
