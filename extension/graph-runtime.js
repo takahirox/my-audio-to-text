@@ -170,12 +170,12 @@ export function buildGraph(graph, options) {
       case 'Plamo3Translate2B':
         node = new TranslationSchedulerNode({ prepare: options.preparePlamo || verifiedPlamoCache,
           TranslationNode: Plamo3Translate2BTranslationNode, modelName: 'PLaMo 3 Translate 2B', workerFactory: options.translationWorkerFactory,
-          onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
+          onState: (state, severity, request) => options.onTranslationState?.(state, spec.id, severity, request) }); resources.translations.push(node); break;
       case 'TranslateGemma4B':
         node = new TranslationSchedulerNode({ prepare: options.prepareTranslateGemma || verifiedTranslateGemmaCache,
           TranslationNode: TranslateGemmaTranslationNode,
           modelName: 'TranslateGemma 4B', workerFactory: options.translationWorkerFactory,
-          onState: (state, severity) => options.onTranslationState?.(state, spec.id, severity) }); resources.translations.push(node); break;
+          onState: (state, severity, request) => options.onTranslationState?.(state, spec.id, severity, request) }); resources.translations.push(node); break;
       case 'Supertonic3': case 'Kokoro': {
         const Node = spec.type === 'Supertonic3' ? Supertonic3TextToSpeechNode : KokoroTextToSpeechNode;
         const production = new Node({ ...spec.settings, workerFactory: options.ttsWorkerFactory,

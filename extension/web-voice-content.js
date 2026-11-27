@@ -36,6 +36,7 @@
     host?.setAttribute('data-voice-state', next);
     if (!button) return;
     if (!session || next === 'stopping' || next === 'error') floatingText.textContent = '';
+    const diagnostic = error || (next === 'recording' ? session?.notice : '');
     const labels = { idle: recovery?.pending.length ? 'Review retained dictation' : 'Start voice typing', preparing: 'Preparing… Click to cancel', recording: 'Recording · Stop voice typing', stopping: 'Stopping…', error: 'Voice typing error · Retry' };
     const icon = { idle: 'mic', preparing: 'progress_activity', recording: 'stop', stopping: 'progress_activity', error: 'error' }[next];
     // Build SVG in the isolated world; no HTML parsing, font or resource requests.
@@ -45,9 +46,9 @@
     svg.dataset.icon = icon;
     const path = document.createElementNS(svg.namespaceURI, 'path');
     path.setAttribute('d', iconPaths[icon]); svg.append(path); button.replaceChildren(svg);
-    button.setAttribute('aria-label', labels[next]); button.setAttribute('aria-description', 'Right-click or press Shift+F10 to start with a voice graph and save it as the default.'); button.title = error || labels[next]; host.title = error || labels[next]; button.disabled = next === 'stopping';
+    button.setAttribute('aria-label', labels[next]); button.setAttribute('aria-description', 'Right-click or press Shift+F10 to start with a voice graph and save it as the default.'); button.title = diagnostic || labels[next]; host.title = diagnostic || labels[next]; button.disabled = next === 'stopping';
     button.dataset.state = next;
-    status.textContent = error || (next === 'preparing' ? 'Preparing…' : next === 'recording' ? 'Recording' : next === 'stopping' ? 'Stopping…' : '');
+    status.textContent = diagnostic || (next === 'preparing' ? 'Preparing…' : next === 'recording' ? 'Recording' : next === 'stopping' ? 'Stopping…' : '');
     position();
   }
   function position() {
@@ -395,6 +396,7 @@
       if (message.type === 'state' && session && message.capability === session.capability) {
         const owner = session;
         if (message.state === 'recording') {
+          owner.notice = message.notice;
           void owner.capture.start().then(() => {
             if (session === owner && !owner.cancelRequested && !owner.stopping) stateUI('recording');
           }).catch(error => { if (session === owner) abort(error.message); });

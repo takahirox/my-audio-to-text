@@ -59,7 +59,7 @@ export class TranslationSchedulerNode {
     if (job.provisional && job.revision !== this.revision) return;
     // Per-utterance validation errors must reach diagnostics even when the
     // generic formatter (or any other consumer) leaves error disconnected.
-    if (error && !this.error) this.onState(`Translation unavailable: ${error}`, 'error');
+    if (error && !this.error) this.onState(`Translation unavailable: ${error}`, 'error', { provisional: job.provisional === true });
     const [sourcePort, textPort, errorPort, idPort] = this.outputGroups[job.provisional ? 1 : 0];
     (job.context || this.context).emitOutputs({ ...(job.id === undefined ? {} : { [idPort]: job.id }), [sourcePort]: job.source, [errorPort]: error, ...(error ? {} : { [textPort]: text }) }, { provisional: job.provisional === true });
   }
