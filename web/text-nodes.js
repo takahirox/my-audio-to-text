@@ -30,7 +30,7 @@ export class TextFormatterNode {
     this.inputs = formatInputs(inputCount);
     this.parts = parseTemplate(template, inputCount);
     this.values = {};
-    // Desktop insertion needs committed inputs even when Live shows previews.
+    // Keep provisional inputs separate so committed results use committed values.
     this.previews = separatePreviews ? {} : null;
   }
   receiveInputs(values, context) {
