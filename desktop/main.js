@@ -417,7 +417,7 @@ function bindIPC() {
   handle('runtime', () => runtime, 'runtime:insert', (id, text) => controller.insert(id, text));
   fromRuntime('response', result => pendingCommands.get(result.request)?.(result));
   fromRuntime('failure', (id, message) => { void controller.cancel(String(message).slice(0, 700), id); });
-  fromRuntime('capture-ended', id => controller.captureEnded(id));
+  fromRuntime('capture-ended', (id, message) => controller.captureEnded(id, typeof message === 'string' ? message.slice(0, 700) : undefined));
   fromRuntime('display', (...args) => controller.display(...args));
   fromRuntime('floating-display', (id, text) => controller.floatingDisplay(id, text));
   fromRuntime('actions', (id, actions) => {

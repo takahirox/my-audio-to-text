@@ -2,6 +2,7 @@ import { Microphone } from '../web/audio.js';
 import { BrowserTabAudioNode } from '../web/transcription-nodes.js';
 import { displayInputs } from '../web/display-node.js';
 import { snapshotItem } from '../web/paired-text.js';
+import { executableGraph } from '../extension/graph.js';
 import { buildGraph } from '../extension/graph-runtime.js';
 import { graphActions, pressGraphButton } from '../extension/graph-actions.js';
 import { prepareGraphModelAssets } from '../extension/graph-model-preparation.js';
@@ -31,15 +32,22 @@ class DesktopMicrophoneNode extends BrowserTabAudioNode {
   }
 
   async start(context) {
+    if (this.disposed) return;
     try { await super.start(context); }
     catch (error) {
+      if (this.disposed) return;
       throw Error(`Microphone unavailable: ${error.message}. Check the system microphone permission and default input, then retry.`);
     }
   }
 
   async stop() {
+    if (this.disposed) return this.releasing;
     await super.stop();
     this.onStopped();
+  }
+
+  async dispose() {
+    return this.releasing ??= super.dispose();
   }
 }
 
@@ -82,9 +90,16 @@ async function start(id, graph) {
       },
       onError(error, node) {
         if (runtime.audioSources.has(node) || graph.nodes.some(spec => spec.id === node && spec.type === FOCUSED_OUTPUT)) fail(error.message);
-        else { status(node, error.message, 'error'); owner.publishActions?.(); }
+        else {
+          status(node, error.message, 'error');
+          if (runtime.speechNodes.has(node)) reconcileCapture(error.message);
+          owner.publishActions?.();
+        }
       },
-      onSpeechEvent: onEvent,
+      onSpeechEvent(event, node) {
+        onEvent(event, node);
+        if (event.branchUnavailable) reconcileCapture(event.message);
+      },
       onTextProcessingEvent: onEvent,
       onIfConditionEvent: onEvent,
       onTtsState: (message, node, event) => onEvent({ ...event, message }, node),
@@ -95,6 +110,24 @@ async function start(id, graph) {
       onSynthesizedAudio: (audio, audioSignal, node) => { if (active() && !audioSignal.aborted) host.audio(id, node, audio); },
       onModelProgress: (node, index, total) => status(node, `Loading local model ${index} of ${total}…`),
     });
+    function reconcileCapture(message) {
+      const { audioSources, description, pipeline, speechNodes } = runtime;
+      if (!active() || !['starting', 'running', 'stopping'].includes(pipeline.state)) return;
+      const unavailable = new Set([...pipeline.entries.values()]
+        .filter(entry => entry.failed || speechNodes.get(entry.id)?.unavailable).map(entry => entry.id));
+      const remaining = executableGraph(description, { unavailable });
+      if (!remaining.nodes.length) {
+        fail(message);
+        return;
+      }
+      const usable = new Set(remaining.nodes.map(node => node.id));
+      const unused = [...audioSources].filter(([node]) => !usable.has(node));
+      if (!unused.length) return;
+      // Release sources without flushing into failed paths. Other branches keep their live state.
+      void Promise.all(unused.map(([, source]) => source.dispose())).then(() => {
+        if (active() && unused.length === audioSources.size) host.captureEnded(id, message);
+      }, error => fail(error.message));
+    }
     Object.assign(owner, runtime);
     const publishPreparation = throttledProgress((model, view) => host.preparation(id, model.key, model.title, view));
     await prepareGraphModelAssets(runtime.description, {
