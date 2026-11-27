@@ -265,8 +265,8 @@ function dispatchFixture(t, tool) {
 test('macOS clipboard paste', async t => {
   const tool = await compileDispatchFixture(t);
 
-  await t.test('streams rapid provisional and final TEXT through a delayed AppKit editor read', async t => {
-    const { controller, configure, dispatched, start } = dispatchFixture(t, tool);
+  await t.test('drains successive TEXT despite Command flags left by synthetic Paste', async t => {
+    const { target, controller, configure, dispatched, start, waiting } = dispatchFixture(t, tool);
     await configure({ frontPid: 200, noRole: true, noField: true });
     const id = await start();
     assert.ok(id);
@@ -283,11 +283,13 @@ test('macOS clipboard paste', async t => {
     const chunks = [' 東京🙂\n\t', ' 東京🙂\n\t', ' か\u3099 '];
     source.emitOutputs({ text: chunks[0] }, { provisional: true });
     source.emit('text', '');
-    source.emit('text', chunks[1]);
-    source.emitOutputs({ text: chunks[2] }, { provisional: true });
 
     let prefix = 'left';
     for (const [index, chunk] of chunks.entries()) {
+      if (index === 1) {
+        source.emit('text', chunks[1]);
+        source.emitOutputs({ text: chunks[2] }, { provisional: true });
+      }
       const staged = await dispatched(index + 1);
       assert.equal(controller.state.phase, 'running');
       assert.equal(staged.keyUps, index + 1);
@@ -306,6 +308,10 @@ test('macOS clipboard paste', async t => {
       assert.deepEqual(settled.clipboard, originalClipboard);
       assert.equal(settled.currentHostOnly, true);
     }
+    await controller.current.queue;
+    assert.equal(target.pending.size, 0);
+    assert.equal(waiting(), undefined);
+    assert.equal(controller.state.phase, 'running');
     await pipeline.stop();
     await controller.stop();
     assert.equal(controller.state.error, '');
